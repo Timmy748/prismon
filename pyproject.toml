@@ -1,0 +1,67 @@
+[project]
+name = 'tcc'
+version = '0.1.0'
+description = 'Add your description here'
+readme = 'README.md'
+requires-python = '>=3.13'
+dependencies = []
+
+[tool.ruff]
+line-length = 80
+target-version = 'py313'
+fix = true
+show-fixes = true
+indent-width = 4
+exclude = [
+  '__init__',
+  'venv',
+  '.venv',
+  'env',
+  '.env',
+  '__pycache__',
+  'migrations',
+]
+
+[tool.ruff.lint]
+select = ['I', 'F', 'E', 'W', 'PL', 'PT']
+
+[tool.ruff.format]
+quote-style = 'single'
+indent-style = 'space'
+line-ending = 'lf'
+
+[tool.pyright]
+typeCheckingMode = 'standard'
+pythonVersion = '3.13'
+include = ['src']
+exclude = ['**/venv', '**/.venv', '**/env', '**/.env', '**/__pycache__']
+venv = '.venv'
+venvPath = '.'
+executionEnvironments = [{ root = 'src' }]
+reportMissingTypeStubs = true
+stubPath = 'stubs'
+
+[tool.pytest.ini_options]
+pythonpath = '.'
+addopts = '-p no:warnings'
+asyncio_default_fixture_loop_scope = 'function'
+
+[tool.taskipy.tasks]
+lint = 'ruff check'
+pre_format = 'ruff check --fix'
+format = 'ruff format'
+
+pre_test = 'task lint'
+test = 'pytest src/ -s -x --cov=src -vv'
+post_test = 'coverage html'
+
+[dependency-groups]
+dev = [
+  "gitlint>=0.19.1",
+  "mypy>=2.3.1",
+  "pytest>=9.1.1",
+  "pytest-asyncio>=1.4.0",
+  "pytest-cov>=7.1.0",
+  "ruff>=0.16.5",
+  "taskipy>=1.14.1",
+]
