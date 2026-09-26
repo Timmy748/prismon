@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  continuous-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repositório
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verificar título do Pull Request
+        if: github.event_name == 'pull_request'
+        uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Instalar o python
+        uses: actions/setup-python@v7
+        with: 
+          python-version: '3.13'
+
+      - name: Instalar UV
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+
+      - name: Instalar dependências
+        run: uv sync --group dev
+
+      - name: Ruff lint
+        run: uv run task lint
+
+      - name: Rodar testes
+        run: uv run task test
+
