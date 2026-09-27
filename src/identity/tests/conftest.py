@@ -7,10 +7,9 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from identity.entities.registry import mapper_registry
-from identity.entities.token import RefreshToken  # noqa: F401
-from identity.entities.user import User  # noqa: F401
 from identity.repositories.token import RefreshTokenRepository
 from identity.repositories.user import UserRepository
+from identity.security.jwt import JwtTokenProvider
 from identity.security.password_hasher import Argonid2Hasher
 
 
@@ -51,3 +50,12 @@ def token_repo(
 @pytest.fixture
 def argon2_hasher() -> Argonid2Hasher:
     return Argonid2Hasher(pepper='pepper')
+
+
+@pytest.fixture
+def jwt_provider() -> JwtTokenProvider:
+    return JwtTokenProvider(
+        secret_key='minha-chave-secreta-de-teste',
+        algorithm='HS256',
+        expires_in_minutes=15,
+    )
