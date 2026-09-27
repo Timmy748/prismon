@@ -1,5 +1,8 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 import pytest_asyncio
+from argon2 import PasswordHasher
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -7,9 +10,12 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from identity.entities.registry import mapper_registry
-from identity.repositories.token import RefreshTokenRepository
-from identity.repositories.user import UserRepository
-from identity.security.jwt import JwtTokenProvider
+from identity.repositories.token import (
+    IRefreshTokenRepository,
+    RefreshTokenRepository,
+)
+from identity.repositories.user import IUserRepository, UserRepository
+from identity.security.jwt import ITokenProvider, JwtTokenProvider
 from identity.security.password_hasher import Argonid2Hasher
 
 
@@ -59,3 +65,23 @@ def jwt_provider() -> JwtTokenProvider:
         algorithm='HS256',
         expires_in_minutes=15,
     )
+
+
+@pytest.fixture
+def mock_user_repo():
+    return AsyncMock(spec=IUserRepository)
+
+
+@pytest.fixture
+def mock_token_repo():
+    return AsyncMock(spec=IRefreshTokenRepository)
+
+
+@pytest.fixture
+def mock_password_hasher():
+    return MagicMock(spec=PasswordHasher)
+
+
+@pytest.fixture
+def mock_token_provider():
+    return MagicMock(spec=ITokenProvider)

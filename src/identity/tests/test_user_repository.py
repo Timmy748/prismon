@@ -17,6 +17,7 @@ async def test_create_user_returns_dto(
     assert dto.id is not None
     assert dto.username == 'john'
     assert dto.email == 'john@example.com'
+    assert dto.password_hash == 'hashed'
 
 
 @pytest.mark.asyncio
@@ -34,6 +35,7 @@ async def test_get_user_by_id_returns_dto(
     assert dto is not None
     assert dto.id == created.id
     assert dto.username == 'john'
+    assert dto.password_hash == 'hashed'
 
 
 @pytest.mark.asyncio
@@ -41,6 +43,76 @@ async def test_get_user_by_id_returns_none_when_not_found(
     user_repo: UserRepository,
 ) -> None:
     dto = await user_repo.get_user_by_id(999)
+
+    assert dto is None
+
+
+@pytest.mark.asyncio
+async def test_get_user_by_email_returns_dto(
+    user_repo: UserRepository,
+) -> None:
+    created = await user_repo.create_user(
+        username='john',
+        email='john@example.com',
+        password_hash='hashed',
+    )
+
+    dto = await user_repo.get_user(email='john@example.com')
+
+    assert dto is not None
+    assert dto.id == created.id
+    assert dto.email == 'john@example.com'
+
+
+@pytest.mark.asyncio
+async def test_get_user_by_username_returns_dto(
+    user_repo: UserRepository,
+) -> None:
+    created = await user_repo.create_user(
+        username='john',
+        email='john@example.com',
+        password_hash='hashed',
+    )
+
+    dto = await user_repo.get_user(username='john')
+
+    assert dto is not None
+    assert dto.id == created.id
+    assert dto.username == 'john'
+
+
+@pytest.mark.asyncio
+async def test_get_user_by_email_or_username_returns_dto(
+    user_repo: UserRepository,
+) -> None:
+    created = await user_repo.create_user(
+        username='john',
+        email='john@example.com',
+        password_hash='hashed',
+    )
+
+    dto = await user_repo.get_user(email='other@example.com', username='john')
+
+    assert dto is not None
+    assert dto.id == created.id
+
+
+@pytest.mark.asyncio
+async def test_get_user_returns_none_when_not_found(
+    user_repo: UserRepository,
+) -> None:
+    dto = await user_repo.get_user(
+        email='notfound@example.com', username='notfound'
+    )
+
+    assert dto is None
+
+
+@pytest.mark.asyncio
+async def test_get_user_returns_none_when_no_arguments(
+    user_repo: UserRepository,
+) -> None:
+    dto = await user_repo.get_user()
 
     assert dto is None
 
@@ -93,6 +165,7 @@ async def test_change_user_password_returns_dto(
     )
 
     assert dto.id == created.id
+    assert dto.password_hash == 'new_hash'
 
 
 @pytest.mark.asyncio
