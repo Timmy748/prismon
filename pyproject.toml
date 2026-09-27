@@ -24,6 +24,7 @@ exclude = [
 
 [tool.ruff.lint]
 select = ['I', 'F', 'E', 'W', 'PL', 'PT']
+ignore = ['PT018']
 
 [tool.ruff.format]
 quote-style = 'single'
@@ -42,7 +43,7 @@ reportMissingTypeStubs = true
 stubPath = 'stubs'
 
 [tool.pytest.ini_options]
-pythonpath = '.'
+pythonpath = ['.', 'src']
 addopts = '-p no:warnings'
 asyncio_default_fixture_loop_scope = 'function'
 
@@ -57,6 +58,7 @@ post_test = 'coverage html'
 
 [dependency-groups]
 dev = [
+  "aiosqlite>=0.22.1",
   "gitlint>=0.19.1",
   "mypy>=2.3.1",
   "pytest>=9.1.1",
