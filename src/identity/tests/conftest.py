@@ -11,6 +11,7 @@ from identity.entities.token import RefreshToken  # noqa: F401
 from identity.entities.user import User  # noqa: F401
 from identity.repositories.token import RefreshTokenRepository
 from identity.repositories.user import UserRepository
+from identity.security.password_hasher import Argonid2Hasher
 
 
 @pytest_asyncio.fixture
@@ -45,3 +46,8 @@ def token_repo(
     session: AsyncSession,
 ) -> RefreshTokenRepository:
     return RefreshTokenRepository(session)
+
+
+@pytest.fixture
+def argon2_hasher() -> Argonid2Hasher:
+    return Argonid2Hasher(pepper='pepper')
