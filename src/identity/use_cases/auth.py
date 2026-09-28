@@ -1,8 +1,6 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from argon2 import PasswordHasher
-
 from identity.dtos.auth import AuthenticationDTO, LoginDTO
 from identity.exceptions import (
     InvalidCredentialsException,
@@ -12,6 +10,7 @@ from identity.exceptions import (
 from identity.repositories.token import IRefreshTokenRepository
 from identity.repositories.user import IUserRepository
 from identity.security.jwt import ITokenProvider
+from identity.security.password_hasher import PasswordHasher
 
 
 async def login(

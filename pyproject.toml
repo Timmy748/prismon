@@ -6,9 +6,13 @@ readme = 'README.md'
 requires-python = '>=3.13'
 dependencies = [
     "fastapi>=0.141.1",
-    "pwdlib>=0.3.1",
+    "asyncpg>=0.31.0",
+    "pwdlib[argon2]>=0.3.1",
+    "email-validator>=2.2.0",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.13.1",
     "pyjwt>=2.15.0",
-    "sqlalchemy>=2.1.1",
+    "sqlalchemy[asyncio]>=2.1.1",
 ]
 
 [tool.ruff]
@@ -65,6 +69,8 @@ post_test = 'coverage html'
 dev = [
   "aiosqlite>=0.22.1",
   "gitlint>=0.19.1",
+  "httpx>=0.28.1",
+  "httpx2>=2.13.1",
   "mypy>=2.3.1",
   "pytest>=9.1.1",
   "pytest-asyncio>=1.4.0",

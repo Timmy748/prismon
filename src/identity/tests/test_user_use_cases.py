@@ -10,6 +10,7 @@ from identity.dtos.user import (
 )
 from identity.exceptions import (
     IncorrectPasswordException,
+    InvalidTokenException,
     UserAlreadyExistsException,
     UserNotFoundException,
 )
@@ -17,6 +18,7 @@ from identity.use_cases.user import (
     change_password,
     create_user,
     delete_user,
+    get_current_user,
     get_user_by_id,
     update_user,
 )
@@ -123,6 +125,41 @@ async def test_get_user_by_id_not_found(mock_user_repo):
 
     with pytest.raises(UserNotFoundException):
         await get_user_by_id(user_repo=mock_user_repo, id=999)
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_returns_user_from_access_token(
+    mock_user_repo, mock_token_provider
+):
+    user_dto = UserDTO(
+        id=1,
+        username='testuser',
+        email='test@example.com',
+        password_hash='hashed_pw',
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    mock_token_provider.decode_access_token.return_value = {'sub': '1'}
+    mock_user_repo.get_user_by_id.return_value = user_dto
+
+    result = await get_current_user(
+        mock_user_repo, mock_token_provider, 'access-token'
+    )
+
+    assert result == user_dto
+    mock_user_repo.get_user_by_id.assert_awaited_once_with(1)
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_rejects_invalid_token(
+    mock_user_repo, mock_token_provider
+):
+    mock_token_provider.decode_access_token.return_value = {}
+
+    with pytest.raises(InvalidTokenException):
+        await get_current_user(
+            mock_user_repo, mock_token_provider, 'invalid-token'
+        )
 
 
 @pytest.mark.asyncio

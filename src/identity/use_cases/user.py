@@ -6,10 +6,12 @@ from identity.dtos.user import (
 )
 from identity.exceptions import (
     IncorrectPasswordException,
+    InvalidTokenException,
     UserAlreadyExistsException,
     UserNotFoundException,
 )
 from identity.repositories.user import IUserRepository
+from identity.security.jwt import ITokenProvider
 from identity.security.password_hasher import PasswordHasher
 
 
@@ -41,6 +43,23 @@ async def get_user_by_id(
     user = await user_repo.get_user_by_id(id)
     if not user:
         raise UserNotFoundException(id)
+    return user
+
+
+async def get_current_user(
+    user_repo: IUserRepository,
+    token_provider: ITokenProvider,
+    access_token: str,
+) -> UserDTO:
+    try:
+        claims = token_provider.decode_access_token(access_token)
+        user_id = int(claims['sub'])
+    except (ValueError, KeyError, TypeError) as exc:
+        raise InvalidTokenException() from exc
+
+    user = await user_repo.get_user_by_id(user_id)
+    if user is None:
+        raise InvalidTokenException()
     return user
 
 

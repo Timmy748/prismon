@@ -5,6 +5,8 @@ from typing import Protocol
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 
+from identity.settings import get_settings
+
 
 class PasswordHasher(Protocol):
     def hash(self, password: str) -> str: ...
@@ -30,3 +32,9 @@ class Argonid2Hasher(PasswordHasher):
     def verify(self, plain_password: str, hashed_password: str) -> bool:
         hmac_password = self._hmac(plain_password)
         return self._ph.verify(hmac_password, hashed_password)
+
+
+def create_password_hasher() -> PasswordHasher:
+    return Argonid2Hasher(
+        pepper=get_settings().password_pepper.get_secret_value()
+    )

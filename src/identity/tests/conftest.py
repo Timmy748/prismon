@@ -1,22 +1,31 @@
+import os
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from argon2 import PasswordHasher
+from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
 
+from identity.dtos.user import UserDTO
 from identity.entities.registry import mapper_registry
 from identity.repositories.token import (
     IRefreshTokenRepository,
     RefreshTokenRepository,
 )
 from identity.repositories.user import IUserRepository, UserRepository
+from identity.routes.auth import create_auth_router
+from identity.routes.user import create_user_router
 from identity.security.jwt import ITokenProvider, JwtTokenProvider
-from identity.security.password_hasher import Argonid2Hasher
+from identity.security.password_hasher import Argonid2Hasher, PasswordHasher
+
+os.environ.setdefault('DATABASE_URL', 'sqlite+aiosqlite:///:memory:')
+os.environ.setdefault('PASSWORD_PEPPER', 'test-pepper')
+os.environ.setdefault('JWT_SECRET_KEY', 'test-jwt-secret-key')
 
 
 @pytest_asyncio.fixture
@@ -85,3 +94,49 @@ def mock_password_hasher():
 @pytest.fixture
 def mock_token_provider():
     return MagicMock(spec=ITokenProvider)
+
+
+@pytest.fixture
+def route_user() -> UserDTO:
+    now = datetime.now(timezone.utc)
+    return UserDTO(
+        id=1,
+        username='ana',
+        email='ana@example.com',
+        password_hash='secret-hash',
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.fixture
+def identity_route_app(
+    mock_user_repo,
+    mock_token_repo,
+    mock_password_hasher,
+    mock_token_provider,
+) -> FastAPI:
+    app = FastAPI()
+
+    async def user_repository_factory():
+        return mock_user_repo
+
+    async def token_repository_factory():
+        return mock_token_repo
+
+    app.include_router(
+        create_user_router(
+            password_hasher_factory=lambda: mock_password_hasher,
+            token_provider_factory=lambda: mock_token_provider,
+            repository_factory=user_repository_factory,
+        )
+    )
+    app.include_router(
+        create_auth_router(
+            password_hasher_factory=lambda: mock_password_hasher,
+            token_provider_factory=lambda: mock_token_provider,
+            user_repository_factory=user_repository_factory,
+            token_repository_factory=token_repository_factory,
+        )
+    )
+    return app

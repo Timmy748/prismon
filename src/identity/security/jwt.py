@@ -4,6 +4,8 @@ from typing import Any, Dict, Protocol
 
 import jwt
 
+from identity.settings import get_settings
+
 
 class ITokenProvider(Protocol):
     def generate_access_token(self, payload: Dict[str, Any]) -> str: ...
@@ -53,3 +55,12 @@ class JwtTokenProvider(ITokenProvider):
 
     def generate_refresh_token_hash(self, refresh_token_raw: str) -> str:
         return hashlib.sha256(refresh_token_raw.encode('utf-8')).hexdigest()
+
+
+def create_token_provider() -> ITokenProvider:
+    settings = get_settings()
+    return JwtTokenProvider(
+        secret_key=settings.jwt_secret_key.get_secret_value(),
+        algorithm=settings.jwt_algorithm,
+        expires_in_minutes=settings.jwt_expires_in_minutes,
+    )

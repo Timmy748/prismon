@@ -4,6 +4,7 @@ from typing import Protocol
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from identity.database import get_session_factory
 from identity.dtos.token import RefreshTokenDTO
 from identity.entities.token import RefreshToken
 
@@ -75,3 +76,9 @@ class RefreshTokenRepository(IRefreshTokenRepository):
         )
         await self._session.execute(stmt)
         await self._session.commit()
+
+
+async def create_refresh_token_repository() -> IRefreshTokenRepository:
+    session_maker = get_session_factory()
+    async with session_maker() as session:
+        return RefreshTokenRepository(session)
