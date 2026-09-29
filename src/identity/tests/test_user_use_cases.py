@@ -326,3 +326,24 @@ async def test_delete_user_not_found(mock_user_repo):
         await delete_user(user_repo=mock_user_repo, id=999)
 
     mock_user_repo.delete_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_raises_invalid_token_when_user_not_found(
+    mock_user_repo, mock_token_provider
+):
+
+    mock_token_provider.decode_access_token.return_value = {'sub': '1'}
+    mock_user_repo.get_user_by_id.return_value = None
+
+    with pytest.raises(InvalidTokenException):
+        await get_current_user(
+            user_repo=mock_user_repo,
+            token_provider=mock_token_provider,
+            access_token='valid-token-for-non-existent-user',
+        )
+
+    mock_token_provider.decode_access_token.assert_called_once_with(
+        'valid-token-for-non-existent-user'
+    )
+    mock_user_repo.get_user_by_id.assert_called_once_with(1)

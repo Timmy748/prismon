@@ -18,5 +18,5 @@ class Settings(BaseSettings):
 
 
 @lru_cache
-def get_settings() -> Settings:
+def get_settings() -> Settings:  # pragma: no cover
     return Settings()
