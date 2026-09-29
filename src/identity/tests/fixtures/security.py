@@ -1,4 +1,3 @@
-
 import pytest
 
 from identity.security.jwt import JwtTokenProvider
