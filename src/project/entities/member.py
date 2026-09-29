@@ -11,7 +11,7 @@ class MemberRole(str, Enum):
     OWNER = 'owner'
     DIRECTOR = 'director'
     MEMBER = 'member'
-    VIEWER = 'viewer'
+    COLLABORATOR = 'collaborator'
 
 
 class MemberStatus(str, Enum):
