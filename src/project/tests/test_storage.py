@@ -24,6 +24,17 @@ def test_save_creates_parent_directories_and_overwrites_file(
     assert (tmp_path / 'nested/file.bin').read_bytes() == b'second'
 
 
+def test_save_none_does_not_create_or_overwrite_file(tmp_path: Path) -> None:
+    storage = LocalStorage(tmp_path)
+
+    storage.save('file.bin', None)
+
+    assert storage.retrieve('file.bin') is None
+    storage.save('file.bin', b'content')
+    storage.save('file.bin', None)
+    assert storage.retrieve('file.bin') == b'content'
+
+
 def test_retrieve_returns_none_when_file_does_not_exist(
     tmp_path: Path,
 ) -> None:

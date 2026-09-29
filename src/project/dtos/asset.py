@@ -28,7 +28,7 @@ class CreateAssetDTO:
 @dataclass(frozen=True, slots=True)
 class UpdateAssetDTO:
     file: str | None = None
-    type: AssetStatus | None = None
+    type: str | None = None
     name: str | None = None
     description: str | None = None
 

@@ -5,7 +5,7 @@ from project.settings import get_settings
 
 
 class IStorage(Protocol):
-    def save(self, key: str, content: bytes) -> None: ...
+    def save(self, key: str, content: bytes | None) -> None: ...
 
     def retrieve(self, key: str) -> bytes | None: ...
 
@@ -22,7 +22,9 @@ class LocalStorage:
             raise ValueError('Storage key must stay within the storage root')
         return path
 
-    def save(self, key: str, content: bytes) -> None:
+    def save(self, key: str, content: bytes | None) -> None:
+        if content is None:
+            return
         path = self._path_for(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
