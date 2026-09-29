@@ -34,7 +34,7 @@ class Argonid2Hasher(PasswordHasher):
         return self._ph.verify(hmac_password, hashed_password)
 
 
-def create_password_hasher() -> PasswordHasher:
+def create_password_hasher() -> PasswordHasher:  # pragma: no cover
     return Argonid2Hasher(
         pepper=get_settings().password_pepper.get_secret_value()
     )

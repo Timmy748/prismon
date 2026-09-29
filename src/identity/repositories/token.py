@@ -78,7 +78,9 @@ class RefreshTokenRepository(IRefreshTokenRepository):
         await self._session.commit()
 
 
-async def create_refresh_token_repository() -> IRefreshTokenRepository:
+async def create_refresh_token_repository() -> (
+    IRefreshTokenRepository
+):  # pragma: no cover
     session_maker = get_session_factory()
     async with session_maker() as session:
         return RefreshTokenRepository(session)
