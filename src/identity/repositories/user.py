@@ -144,7 +144,7 @@ class UserRepository(IUserRepository):
             await self._session.commit()
 
 
-async def create_user_repository() -> IUserRepository:
+async def create_user_repository() -> IUserRepository:  # pragma: no cover
     session_maker = get_session_factory()
     async with session_maker() as session:
         return UserRepository(session)

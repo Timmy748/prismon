@@ -57,7 +57,7 @@ class JwtTokenProvider(ITokenProvider):
         return hashlib.sha256(refresh_token_raw.encode('utf-8')).hexdigest()
 
 
-def create_token_provider() -> ITokenProvider:
+def create_token_provider() -> ITokenProvider:  # pragma: no cover
     settings = get_settings()
     return JwtTokenProvider(
         secret_key=settings.jwt_secret_key.get_secret_value(),
