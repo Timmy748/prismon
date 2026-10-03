@@ -1,0 +1,50 @@
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Optional
+
+from sqlalchemy import DateTime, ForeignKey, Index, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from project.entities.registry import mapper_registry
+
+
+class DocumentStatus(str, Enum):
+    DRAFT = 'draft'
+    PENDING = 'pending'
+    PUBLISHED = 'published'
+    ARCHIVED = 'archived'
+
+
+@mapper_registry.mapped_as_dataclass
+class Document:
+    __tablename__ = 'documents'
+    __table_args__ = (
+        Index(
+            'ix_documents_project_updated_at_id',
+            'project_id',
+            'updated_at',
+            'id',
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey('projects.id', ondelete='CASCADE')
+    )
+    file: Mapped[str] = mapped_column(String(256))
+    name: Mapped[str] = mapped_column(String(256))
+    description: Mapped[Optional[str]] = mapped_column(
+        String(256), default=None
+    )
+    status: Mapped[DocumentStatus] = mapped_column(default=DocumentStatus.DRAFT)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        insert_default=lambda: datetime.now(timezone.utc),
+        init=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        insert_default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        init=False,
+    )
