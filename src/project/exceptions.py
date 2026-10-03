@@ -2,6 +2,32 @@ class ProjectException(Exception):
     """Base exception for project domain errors."""
 
 
+class ProjectUserAuthenticationException(ProjectException):
+    """Raised when Identity rejects a user's access token."""
+
+    def __init__(self) -> None:
+        super().__init__('Invalid or expired user access token')
+
+
+class ProjectUserNotFoundException(ProjectException):
+    def __init__(self, user_id: int) -> None:
+        self.user_id = user_id
+        super().__init__(f'User {user_id} not found')
+
+
+class ProjectUserServiceException(ProjectException):
+    """Raised when Identity cannot serve a user lookup request."""
+
+    def __init__(self) -> None:
+        super().__init__('User service request failed')
+
+
+class InvalidMemberRoleException(ProjectException):
+    def __init__(self, role: str) -> None:
+        self.role = role
+        super().__init__(f'Invalid member role: {role}')
+
+
 class ProjectNotFoundException(ProjectException):
     def __init__(self, project_id: int) -> None:
         self.project_id = project_id

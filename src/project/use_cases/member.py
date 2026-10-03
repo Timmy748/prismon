@@ -9,6 +9,7 @@ from project.entities.member import MemberRole, MemberStatus
 from project.exceptions import (
     InsufficientProjectPermissionException,
     InvalidInvitationStateException,
+    InvalidMemberRoleException,
     MemberAlreadyExistsException,
     MemberNotFoundException,
     ProjectNotFoundException,
@@ -83,7 +84,7 @@ async def change_member_role(
     try:
         role = MemberRole(data.new_role)
     except ValueError as exc:
-        raise ValueError(f'Invalid member role: {data.new_role}') from exc
+        raise InvalidMemberRoleException(data.new_role) from exc
     updated = await member_repo.update_member(member_id, role=role)
     if updated is None:
         raise MemberNotFoundException(member_id)

@@ -7,6 +7,7 @@ from project.entities.member import MemberRole, MemberStatus
 from project.exceptions import (
     InsufficientProjectPermissionException,
     InvalidInvitationStateException,
+    InvalidMemberRoleException,
     MemberAlreadyExistsException,
     MemberNotFoundException,
     ProjectNotFoundException,
@@ -143,7 +144,7 @@ async def test_change_member_role_rejects_invalid_role(
 ):
     project, _ = await _project_with_owner(project_repo, member_repo)
     target = await member_repo.create_member(project.id, 2)
-    with pytest.raises(ValueError, match='Invalid member role'):
+    with pytest.raises(InvalidMemberRoleException, match='Invalid member role'):
         await change_member_role(
             project_repo,
             member_repo,
