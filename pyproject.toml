@@ -5,15 +5,15 @@ description = 'Add your description here'
 readme = 'README.md'
 requires-python = '>=3.13'
 dependencies = [
-    "fastapi[standard]>=0.141.1",
-    "asyncpg>=0.31.0",
-    "pwdlib[argon2]>=0.3.1",
-    "email-validator>=2.2.0",
-    "pydantic>=2.13.5",
-    "pydantic-settings>=2.13.1",
-    "pyjwt>=2.15.0",
-    "sqlalchemy[asyncio]>=2.1.1",
-    "python-multipart>=0.0.32",
+  "fastapi[standard]>=0.141.1",
+  "asyncpg>=0.31.0",
+  "pwdlib[argon2]>=0.3.1",
+  "email-validator>=2.2.0",
+  "pydantic>=2.13.5",
+  "pydantic-settings>=2.13.1",
+  "pyjwt>=2.15.0",
+  "sqlalchemy[asyncio]>=2.1.1",
+  "python-multipart>=0.0.32",
 ]
 
 [tool.ruff]
@@ -61,9 +61,11 @@ asyncio_default_fixture_loop_scope = 'function'
 omit = ['*/project/tests/*', '*/main.py']
 
 [tool.taskipy.tasks]
-lint = 'ruff check'
-pre_format = 'ruff check --fix'
-format = 'ruff format'
+lint = 'ruff check src/'
+pre_format = 'ruff check src/ --fix'
+format = 'ruff format src/'
+
+server = 'fastapi dev src/main.py'
 
 pre_test = 'task lint'
 test = 'pytest src/ -s -x --cov=src -vv'
