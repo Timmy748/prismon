@@ -10,11 +10,11 @@ class Settings(BaseSettings):
         case_sensitive=False, extra='ignore', env_file='.env'
     )
 
-    database_url: str = field(init=False)
-    password_pepper: SecretStr = field(init=False)
-    jwt_secret_key: SecretStr = field(init=False)
-    jwt_algorithm: str = 'HS256'
-    jwt_expires_in_minutes: int = 15
+    DATABASE_URL: str = field(init=False)
+    PASSWORD_PEPPER: SecretStr = field(init=False)
+    JWT_SECRET_KEY: SecretStr = field(init=False)
+    JWT_ALGORITHM: str = 'HS256'
+    JWT_EXPIRES_IN_MINUTES: int = 15
 
 
 @lru_cache
