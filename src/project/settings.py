@@ -9,8 +9,8 @@ class Settings(BaseSettings):  # pragma: no cover
     model_config = SettingsConfigDict(
         case_sensitive=False, extra='ignore', env_file='.env'
     )
-    database_url: str = field(init=False)
-    storage_path: Path = Path('storage')
+    DATABASE_URL: str = field(init=False)
+    STORAGE_PATH: Path = Path('storage')
 
 
 @lru_cache

@@ -45,4 +45,4 @@ class LocalStorage:
 
 
 def create_storage() -> IStorage:  # pragma: no cover
-    return LocalStorage(get_settings().storage_path)
+    return LocalStorage(get_settings().STORAGE_PATH)

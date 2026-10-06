@@ -60,7 +60,7 @@ class JwtTokenProvider(ITokenProvider):
 def create_token_provider() -> ITokenProvider:  # pragma: no cover
     settings = get_settings()
     return JwtTokenProvider(
-        secret_key=settings.jwt_secret_key.get_secret_value(),
-        algorithm=settings.jwt_algorithm,
-        expires_in_minutes=settings.jwt_expires_in_minutes,
+        secret_key=settings.JWT_SECRET_KEY.get_secret_value(),
+        algorithm=settings.JWT_ALGORITHM,
+        expires_in_minutes=settings.JWT_EXPIRES_IN_MINUTES,
     )

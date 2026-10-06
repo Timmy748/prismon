@@ -36,5 +36,5 @@ class Argonid2Hasher(PasswordHasher):
 
 def create_password_hasher() -> PasswordHasher:  # pragma: no cover
     return Argonid2Hasher(
-        pepper=get_settings().password_pepper.get_secret_value()
+        pepper=get_settings().PASSWORD_PEPPER.get_secret_value()
     )
