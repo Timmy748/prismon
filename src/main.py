@@ -1,5 +1,16 @@
 from fastapi import FastAPI
 
+from agents.clients.identity import (
+    create_identity_client as create_agents_identity_client,
+)
+from agents.clients.project import (
+    create_project_client as create_agents_project_client,
+)
+from agents.repositories.chat import create_chat_repository
+from agents.repositories.message import create_message_repository
+from agents.repositories.workflow import create_workflow_repository
+from agents.routes.chats import create_chat_routes
+from agents.routes.workflows import create_workflow_routes
 from identity.repositories.token import create_refresh_token_repository
 from identity.repositories.user import create_user_repository
 from identity.routes.auth import create_auth_router
@@ -18,6 +29,15 @@ from project.routes.projects import create_project_router
 from project.storage import create_storage
 
 app = FastAPI(title='Prismon API')
+app.include_router(
+    create_chat_routes(
+        create_chat_repository,
+        create_message_repository,
+        create_agents_identity_client,
+        create_agents_project_client,
+    )
+)
+app.include_router(create_workflow_routes(create_workflow_repository))
 app.include_router(
     create_user_router(
         create_password_hasher, create_token_provider, create_user_repository
