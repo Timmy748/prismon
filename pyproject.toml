@@ -59,7 +59,12 @@ addopts = '-p no:warnings'
 asyncio_default_fixture_loop_scope = 'function'
 
 [tool.coverage.run]
-omit = ['*/project/tests/*', '*/main.py']
+omit = [
+  '*/project/tests/*',
+  '*/agents/tests/*',
+  '*/agents/migrations/*',
+  '*/main.py',
+]
 
 [tool.taskipy.tasks]
 lint = 'ruff check src/'
@@ -83,4 +88,5 @@ dev = [
   "pytest-cov>=7.1.0",
   "ruff>=0.16.5",
   "taskipy>=1.14.1",
+  "testcontainers[postgres]>=4.10.0",
 ]
