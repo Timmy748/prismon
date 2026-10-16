@@ -2,14 +2,12 @@
 from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from project.clients.client_user import IUserClient
 from project.dtos.member import ChangeRoleMemberDTO, ResumeInviteMemberDTO
 from project.dtos.page import PaginationDTO
-from project.dtos.user import UserDTO
 from project.exceptions import (
     ProjectException,
     ProjectUserAuthenticationException,
@@ -38,29 +36,25 @@ def create_project_members_router(
     user_client_factory: Callable[[], IUserClient],
 ) -> APIRouter:
     router = APIRouter(tags=['project members'])
-    bearer = HTTPBearer(auto_error=False)
 
-    async def authenticated_user(
-        credentials: HTTPAuthorizationCredentials | None,
-    ) -> UserDTO:
-        if credentials is None:
+    async def resolve_current_user(cookies):
+        access_token = cookies.get('jwt')
+        if not access_token:
             raise ProjectUserAuthenticationException()
-        return await user_client_factory().get_current_user(
-            credentials.credentials
-        )
+        return await user_client_factory().get_current_user(access_token)
 
     @router.get(
         '/projects/{project_id}/members',
         response_model=PageSchema[MemberSchema],
     )
     async def get_project_members(
+        request: Request,
         project_id: int,
         limit: int = Query(default=50, ge=1, le=100),
         cursor: str | None = Query(default=None),
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> PageSchema[MemberSchema] | JSONResponse:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(request.cookies)
             page = await get_members(
                 await project_repository_factory(),
                 await member_repository_factory(),
@@ -83,12 +77,12 @@ def create_project_members_router(
         status_code=HTTPStatus.CREATED,
     )
     async def post_member(
+        request: Request,
         project_id: int,
         data: InviteMemberSchema,
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> MemberSchema | JSONResponse:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(request.cookies)
             return await invite_member(
                 await project_repository_factory(),
                 await member_repository_factory(),
@@ -102,10 +96,10 @@ def create_project_members_router(
     async def invitation_response(
         project_id: int,
         accept: bool,
-        credentials: HTTPAuthorizationCredentials | None,
+        cookies,
     ) -> MemberSchema | JSONResponse:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(cookies)
             return await respond_to_invitation(
                 await project_repository_factory(),
                 await member_repository_factory(),
@@ -120,32 +114,32 @@ def create_project_members_router(
         '/projects/{project_id}/members/accept', response_model=MemberSchema
     )
     async def accept_invitation(
+        request: Request,
         project_id: int,
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> MemberSchema | JSONResponse:
-        return await invitation_response(project_id, True, credentials)
+        return await invitation_response(project_id, True, request.cookies)
 
     @router.patch(
         '/projects/{project_id}/members/refuse', response_model=MemberSchema
     )
     async def refuse_invitation(
+        request: Request,
         project_id: int,
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> MemberSchema | JSONResponse:
-        return await invitation_response(project_id, False, credentials)
+        return await invitation_response(project_id, False, request.cookies)
 
     @router.patch(
         '/projects/{project_id}/members/{member_id}',
         response_model=MemberSchema,
     )
     async def patch_member(
+        request: Request,
         project_id: int,
         member_id: int,
         data: ChangeMemberRoleSchema,
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> MemberSchema | JSONResponse:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(request.cookies)
             return await change_member_role(
                 await project_repository_factory(),
                 await member_repository_factory(),
@@ -163,12 +157,12 @@ def create_project_members_router(
         response_model=None,
     )
     async def delete_member(
+        request: Request,
         project_id: int,
         member_id: int,
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> JSONResponse | None:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(request.cookies)
             await remove_member(
                 await project_repository_factory(),
                 await member_repository_factory(),

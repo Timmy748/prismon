@@ -17,7 +17,7 @@ async def test_list_assets_returns_page_and_passes_filters(
 ):
     response = await asset_client.get(
         '/projects/2/assets?limit=10&type=image&status=active',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
     assert response.status_code == HTTPStatus.OK
     assert response.json()['items'][0]['id'] == 4
@@ -41,7 +41,7 @@ async def test_user_client_authentication_error_is_translated(
         4
     ].get_current_user.side_effect = ProjectUserAuthenticationException()
     response = await asset_client.get(
-        '/projects/2/assets', headers={'Authorization': 'Bearer expired'}
+        '/projects/2/assets', cookies={'jwt': 'expired'}
     )
     assert response.status_code == HTTPStatus.UNAUTHORIZED
     assert response.json()['detail'] == 'Invalid or expired user access token'
@@ -53,7 +53,7 @@ async def test_user_client_service_error_is_gateway_error(
 ):
     asset_api[4].get_current_user.side_effect = ProjectUserServiceException()
     response = await asset_client.get(
-        '/projects/2/assets', headers={'Authorization': 'Bearer token'}
+        '/projects/2/assets', cookies={'jwt': 'token'}
     )
     assert response.status_code == HTTPStatus.BAD_GATEWAY
 
@@ -62,7 +62,7 @@ async def test_user_client_service_error_is_gateway_error(
 async def test_list_assets_rejects_invalid_cursor(asset_client):
     response = await asset_client.get(
         '/projects/2/assets?cursor=bad',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
@@ -70,7 +70,7 @@ async def test_list_assets_rejects_invalid_cursor(asset_client):
 @pytest.mark.asyncio
 async def test_list_assets_rejects_invalid_limit(asset_client):
     response = await asset_client.get(
-        '/projects/2/assets?limit=0', headers={'Authorization': 'Bearer token'}
+        '/projects/2/assets?limit=0', cookies={'jwt': 'token'}
     )
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
 
@@ -79,7 +79,7 @@ async def test_list_assets_rejects_invalid_limit(asset_client):
 async def test_upload_asset_multipart(asset_client, asset_api):
     response = await asset_client.post(
         '/projects/2/assets',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
         data={'type': 'image', 'description': 'cover'},
         files={'file': ('cover.png', b'contents', 'image/png')},
     )
@@ -93,7 +93,7 @@ async def test_upload_asset_maps_domain_error(asset_client, asset_api):
     asset_api[3].create_asset.side_effect = AssetNotFoundException(4)
     response = await asset_client.post(
         '/projects/2/assets',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
         data={'type': 'image'},
         files={'file': ('cover.png', b'contents', 'image/png')},
     )
@@ -104,7 +104,7 @@ async def test_upload_asset_maps_domain_error(asset_client, asset_api):
 async def test_update_asset_can_replace_file(asset_client, asset_api):
     response = await asset_client.put(
         '/projects/2/assets/4',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
         data={'type': 'photo'},
         files={'file': ('new.png', b'new contents', 'image/png')},
     )
@@ -116,7 +116,7 @@ async def test_update_asset_can_replace_file(asset_client, asset_api):
 async def test_update_asset_without_file(asset_client, asset_api):
     response = await asset_client.put(
         '/projects/2/assets/4',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
         data={'type': 'photo'},
     )
     assert response.status_code == HTTPStatus.OK
@@ -128,7 +128,7 @@ async def test_update_asset_maps_domain_error(asset_client, asset_api):
     asset_api[3].update_asset.side_effect = AssetNotFoundException(4)
     response = await asset_client.put(
         '/projects/2/assets/4',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
         data={'type': 'photo'},
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
@@ -142,7 +142,7 @@ async def test_asset_permission_error_is_forbidden(asset_client, asset_api):
         'asset_read'
     )
     response = await asset_client.get(
-        '/projects/2/assets', headers={'Authorization': 'Bearer token'}
+        '/projects/2/assets', cookies={'jwt': 'token'}
     )
     assert response.status_code == HTTPStatus.FORBIDDEN
 
@@ -152,7 +152,7 @@ async def test_asset_not_found_is_404(asset_client, asset_api):
     asset_api[3].update_asset.side_effect = AssetNotFoundException(404)
     response = await asset_client.put(
         '/projects/2/assets/404',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
         data={'type': 'photo'},
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
@@ -161,7 +161,7 @@ async def test_asset_not_found_is_404(asset_client, asset_api):
 @pytest.mark.asyncio
 async def test_delete_asset(asset_client, asset_api):
     response = await asset_client.delete(
-        '/projects/2/assets/4', headers={'Authorization': 'Bearer token'}
+        '/projects/2/assets/4', cookies={'jwt': 'token'}
     )
     assert response.status_code == HTTPStatus.NO_CONTENT
     asset_api[3].delete_asset.assert_awaited_once_with(4)
@@ -172,6 +172,6 @@ async def test_delete_asset(asset_client, asset_api):
 async def test_delete_asset_maps_domain_error(asset_client, asset_api):
     asset_api[3].delete_asset.side_effect = AssetNotFoundException(4)
     response = await asset_client.delete(
-        '/projects/2/assets/4', headers={'Authorization': 'Bearer token'}
+        '/projects/2/assets/4', cookies={'jwt': 'token'}
     )
     assert response.status_code == HTTPStatus.NOT_FOUND

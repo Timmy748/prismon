@@ -2,9 +2,8 @@
 from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from agents.clients.identity import IIdentityClient
 from agents.clients.project import IProjectClient
@@ -62,28 +61,24 @@ def create_chat_routes(
     project_client_factory: Callable[[], IProjectClient],
 ) -> APIRouter:
     router = APIRouter(tags=['chats'])
-    bearer = HTTPBearer(auto_error=False)
 
-    async def authenticated_user(
-        credentials: HTTPAuthorizationCredentials | None,
-    ) -> UserDTO:
-        if credentials is None:
+    async def resolve_current_user(cookies) -> UserDTO:
+        access_token = cookies.get('jwt')
+        if not access_token:
             raise UserAuthenticationException()
-        return await identity_client_factory().get_current_user(
-            credentials.credentials
-        )
+        return await identity_client_factory().get_current_user(access_token)
 
     @router.get(
         '/chats/{chat_id}/messages', response_model=PageSchema[MessageSchema]
     )
     async def list_chat_messages(
+        request: Request,
         chat_id: int,
         cursor: str | None = Query(default=None),
         limit: int = Query(default=50, ge=1, le=100),
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> PageSchema[MessageSchema] | JSONResponse:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(request.cookies)
             page = await get_chat_messages(
                 await chat_repository_factory(),
                 await message_repository_factory(),
@@ -102,11 +97,11 @@ def create_chat_routes(
         status_code=HTTPStatus.CREATED,
     )
     async def post_chat_message(
+        request: Request,
         data: CreateMessageSchema,
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> MessageSchema | JSONResponse:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(request.cookies)
             chat_repo = await chat_repository_factory()
             project_client = project_client_factory()
             chat_id = data.chat_id
@@ -146,12 +141,12 @@ def create_chat_routes(
 
     @router.patch('/chats/{chat_id}', response_model=ChatSchema)
     async def patch_chat(
+        request: Request,
         chat_id: int,
         data: UpdateChatTitleSchema,
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> ChatSchema | JSONResponse:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(request.cookies)
             chat = await update_chat_title(
                 await chat_repository_factory(),
                 project_client_factory(),
@@ -169,11 +164,11 @@ def create_chat_routes(
         response_model=None,
     )
     async def remove_chat(
+        request: Request,
         chat_id: int,
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> Response | JSONResponse:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(request.cookies)
             await delete_chat(
                 await chat_repository_factory(),
                 project_client_factory(),
@@ -188,13 +183,13 @@ def create_chat_routes(
         '/projects/{project_id}/chats', response_model=PageSchema[ChatSchema]
     )
     async def list_project_chats(
+        request: Request,
         project_id: int,
         cursor: str | None = Query(default=None),
         limit: int = Query(default=50, ge=1, le=100),
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> PageSchema[ChatSchema] | JSONResponse:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(request.cookies)
             page = await get_project_chats(
                 await chat_repository_factory(),
                 project_client_factory(),

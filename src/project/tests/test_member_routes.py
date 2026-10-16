@@ -43,7 +43,7 @@ async def test_members_list_returns_page(
     ]
     response = await member_route_client.get(
         '/projects/3/members?limit=10',
-        headers={'Authorization': 'Bearer valid'},
+        cookies={'jwt': 'valid'},
     )
     assert response.status_code == 200
     assert response.json()['limit'] == 10
@@ -56,7 +56,7 @@ async def test_members_list_returns_page(
 async def test_invalid_cursor_is_bad_request(member_route_client):
     response = await member_route_client.get(
         '/projects/3/members?cursor=bad',
-        headers={'Authorization': 'Bearer valid'},
+        cookies={'jwt': 'valid'},
     )
     assert response.status_code == 400
 
@@ -69,7 +69,7 @@ async def test_user_client_authentication_error_is_mapped(
         2
     ].get_current_user.side_effect = ProjectUserAuthenticationException()
     response = await member_route_client.get(
-        '/projects/3/members', headers={'Authorization': 'Bearer invalid'}
+        '/projects/3/members', cookies={'jwt': 'invalid'}
     )
     assert response.status_code == 401
 
@@ -82,7 +82,7 @@ async def test_project_error_is_mapped(
         1
     ].get_members.side_effect = ProjectNotFoundException(3)
     response = await member_route_client.get(
-        '/projects/3/members', headers={'Authorization': 'Bearer valid'}
+        '/projects/3/members', cookies={'jwt': 'valid'}
     )
     assert response.status_code == 404
 
@@ -102,7 +102,7 @@ async def test_invite_uses_user_id_contract(
     response = await member_route_client.post(
         '/projects/3/members',
         json={'user_id': 19},
-        headers={'Authorization': 'Bearer valid'},
+        cookies={'jwt': 'valid'},
     )
     assert response.status_code == 201
     assert response.json()['user_id'] == 19
@@ -118,7 +118,7 @@ async def test_invite_permission_error(
     response = await member_route_client.post(
         '/projects/3/members',
         json={'user_id': 19},
-        headers={'Authorization': 'Bearer valid'},
+        cookies={'jwt': 'valid'},
     )
     assert response.status_code == 403
 
@@ -135,7 +135,7 @@ async def test_role_change(member_route_client, member_route_dependencies):
     response = await member_route_client.patch(
         '/projects/3/members/11',
         json={'new_role': 'director'},
-        headers={'Authorization': 'Bearer valid'},
+        cookies={'jwt': 'valid'},
     )
     assert response.status_code == 200
     assert response.json()['role'] == 'director'
@@ -152,7 +152,7 @@ async def test_accept_invitation(
     )
     repo.update_member.return_value = make_member(user_id=7)
     response = await member_route_client.patch(
-        '/projects/3/members/accept', headers={'Authorization': 'Bearer valid'}
+        '/projects/3/members/accept', cookies={'jwt': 'valid'}
     )
     assert response.status_code == 200
     assert response.json()['status'] == 'active'
@@ -168,7 +168,7 @@ async def test_refuse_invitation(
         [make_member(user_id=7, status=MemberStatus.PENDING)], PaginationDTO()
     )
     response = await member_route_client.patch(
-        '/projects/3/members/refuse', headers={'Authorization': 'Bearer valid'}
+        '/projects/3/members/refuse', cookies={'jwt': 'valid'}
     )
     assert response.status_code == 200
     repo.delete_member.assert_awaited_once_with(11)
@@ -183,7 +183,7 @@ async def test_remove_member(member_route_client, member_route_dependencies):
     )
     repo.get_member.return_value = make_member()
     response = await member_route_client.delete(
-        '/projects/3/members/11', headers={'Authorization': 'Bearer valid'}
+        '/projects/3/members/11', cookies={'jwt': 'valid'}
     )
     assert response.status_code == 204
 
@@ -196,7 +196,7 @@ async def test_invitation_domain_error_is_mapped(
         0
     ].get_project.side_effect = ProjectNotFoundException(3)
     response = await member_route_client.patch(
-        '/projects/3/members/accept', headers={'Authorization': 'Bearer valid'}
+        '/projects/3/members/accept', cookies={'jwt': 'valid'}
     )
     assert response.status_code == 404
 
@@ -211,7 +211,7 @@ async def test_role_change_domain_error_is_mapped(
     response = await member_route_client.patch(
         '/projects/3/members/11',
         json={'new_role': 'director'},
-        headers={'Authorization': 'Bearer valid'},
+        cookies={'jwt': 'valid'},
     )
     assert response.status_code == 404
 
@@ -224,6 +224,6 @@ async def test_remove_member_domain_error_is_mapped(
         0
     ].get_project.side_effect = ProjectNotFoundException(3)
     response = await member_route_client.delete(
-        '/projects/3/members/11', headers={'Authorization': 'Bearer valid'}
+        '/projects/3/members/11', cookies={'jwt': 'valid'}
     )
     assert response.status_code == 404

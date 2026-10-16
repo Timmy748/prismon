@@ -2,9 +2,8 @@
 from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from project.clients.client_user import IUserClient
 from project.dtos.asset import CreateAssetDTO, UpdateAssetDTO
@@ -37,28 +36,24 @@ def create_assets_router(
     user_client_factory: Callable[[], IUserClient],
 ) -> APIRouter:
     router = APIRouter(prefix='/projects/{project_id}/assets', tags=['assets'])
-    bearer = HTTPBearer(auto_error=False)
 
-    async def current_user(
-        credentials: HTTPAuthorizationCredentials | None,
-    ):
-        if credentials is None:
+    async def resolve_current_user(cookies):
+        access_token = cookies.get('jwt')
+        if not access_token:
             raise ProjectUserAuthenticationException()
-        return await user_client_factory().get_current_user(
-            credentials.credentials
-        )
+        return await user_client_factory().get_current_user(access_token)
 
     @router.get('', response_model=AssetPageSchema)
     async def list_assets(
+        request: Request,
         project_id: int,
         cursor: str | None = Query(default=None),
         limit: int = Query(default=50, ge=1, le=100),
         type: str | None = Query(default=None),
         status: AssetStatus | None = Query(default=None),
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ):
         try:
-            user = await current_user(credentials)
+            user = await resolve_current_user(request.cookies)
             page = await get_assets(
                 await project_repository_factory(),
                 await member_repository_factory(),
@@ -81,14 +76,14 @@ def create_assets_router(
 
     @router.post('', response_model=AssetSchema, status_code=HTTPStatus.CREATED)
     async def post_asset(
+        request: Request,
         project_id: int,
         type: str = Form(...),
         description: str | None = Form(default=None),
         file: UploadFile = File(...),
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ):
         try:
-            user = await current_user(credentials)
+            user = await resolve_current_user(request.cookies)
             dto = await add_asset(
                 await project_repository_factory(),
                 await member_repository_factory(),
@@ -111,15 +106,15 @@ def create_assets_router(
 
     @router.put('/{asset_id}', response_model=AssetSchema)
     async def put_asset(
+        request: Request,
         project_id: int,
         asset_id: int,
         type: str | None = Form(default=None),
         description: str | None = Form(default=None),
         file: UploadFile | None = File(default=None),
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ):
         try:
-            user = await current_user(credentials)
+            user = await resolve_current_user(request.cookies)
             dto = await update_asset(
                 await project_repository_factory(),
                 await member_repository_factory(),
@@ -137,12 +132,12 @@ def create_assets_router(
 
     @router.delete('/{asset_id}', status_code=HTTPStatus.NO_CONTENT)
     async def remove_asset(
+        request: Request,
         project_id: int,
         asset_id: int,
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ):
         try:
-            user = await current_user(credentials)
+            user = await resolve_current_user(request.cookies)
             await delete_asset(
                 await project_repository_factory(),
                 await member_repository_factory(),

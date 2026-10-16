@@ -51,9 +51,13 @@ async def test_post_login_success(
     )
 
     assert response.status_code == HTTPStatus.OK
-    data = response.json()
-    assert data['access_token'] == 'access-token-123'
-    assert 'refresh_token' in data
+    assert response.json() == {'message': 'Login sucess'}
+    assert response.cookies.get('jwt') == 'access-token-123'
+    assert response.cookies.get('refresh_token')
+    set_cookie_headers = response.headers.get_list('set-cookie')
+    expect_len_cookies = 2
+    assert len(set_cookie_headers) == expect_len_cookies
+    assert all('httponly' in header.lower() for header in set_cookie_headers)
 
 
 @pytest.mark.asyncio
@@ -61,7 +65,6 @@ async def test_post_login_identity_exception_handled(
     auth_client: AsyncClient,
     mock_user_repo,
 ):
-
     mock_user_repo.get_user.side_effect = InvalidCredentialsException()
 
     response = await auth_client.post(
@@ -96,13 +99,16 @@ async def test_post_refresh_token_success(
 
     response = await auth_client.post(
         '/refresh-token',
-        json={'refresh_token': 'valid-refresh-token'},
+        cookies={'refresh_token': 'valid-refresh-token'},
     )
 
     assert response.status_code == HTTPStatus.OK
-    data = response.json()
-    assert data['access_token'] == 'new-access-token'
-    assert 'refresh_token' in data
+    assert response.json() == {'message': 'Refresh sucess'}
+    assert response.cookies.get('jwt') == 'new-access-token'
+    assert response.cookies.get('refresh_token')
+    mock_token_repo.get_refresh_token_by_token.assert_awaited_once_with(
+        'hashed_refresh_token'
+    )
 
 
 @pytest.mark.asyncio
@@ -111,7 +117,6 @@ async def test_post_refresh_token_identity_exception_handled(
     mock_token_repo,
     mock_token_provider,
 ):
-
     mock_token_provider.generate_refresh_token_hash.return_value = (
         'invalid_hash'
     )
@@ -121,7 +126,7 @@ async def test_post_refresh_token_identity_exception_handled(
 
     response = await auth_client.post(
         '/refresh-token',
-        json={'refresh_token': 'invalid-token'},
+        cookies={'refresh_token': 'invalid-token'},
     )
 
     assert response.status_code != HTTPStatus.OK
@@ -150,11 +155,19 @@ async def test_post_logout_success(
 
     response = await auth_client.post(
         '/logout',
-        headers={'Authorization': 'Bearer valid-access-token'},
+        cookies={'jwt': 'valid-access-token'},
     )
 
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert response.content == b''
+    assert any(
+        header.lower().startswith('jwt=""')
+        for header in response.headers.get_list('set-cookie')
+    )
+    assert any(
+        header.lower().startswith('refresh_token=""')
+        for header in response.headers.get_list('set-cookie')
+    )
 
 
 @pytest.mark.asyncio

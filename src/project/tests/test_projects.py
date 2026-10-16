@@ -32,7 +32,7 @@ async def test_list_projects_returns_cursor_page(
     )
     response = await project_http_client.get(
         '/projects?name=Brand&limit=5',
-        headers={'Authorization': 'Bearer valid'},
+        cookies={'jwt': 'valid'},
     )
     assert response.status_code == HTTPStatus.OK
     result = response.json()
@@ -60,7 +60,7 @@ async def test_list_projects_rejects_invalid_cursor(
     authenticated_project_user,
 ):
     response = await project_http_client.get(
-        '/projects?cursor=bad', headers={'Authorization': 'Bearer valid'}
+        '/projects?cursor=bad', cookies={'jwt': 'valid'}
     )
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
@@ -77,7 +77,7 @@ async def test_create_project_registers_authenticated_owner(
     response = await project_http_client.post(
         '/projects',
         json={'name': 'Brand'},
-        headers={'Authorization': 'Bearer valid'},
+        cookies={'jwt': 'valid'},
     )
     assert response.status_code == HTTPStatus.CREATED
     assert response.json()['owner_id'] == 7
@@ -97,7 +97,7 @@ async def test_create_project_maps_domain_error(
     response = await project_http_client.post(
         '/projects',
         json={'name': 'Brand'},
-        headers={'Authorization': 'Bearer valid'},
+        cookies={'jwt': 'valid'},
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
     assert response.json()['detail'] == 'Project 42 not found'
@@ -124,7 +124,7 @@ async def test_update_project_maps_permission_error(
     response = await project_http_client.put(
         '/projects/12',
         json={'name': 'Changed'},
-        headers={'Authorization': 'Bearer valid'},
+        cookies={'jwt': 'valid'},
     )
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert 'detail' in response.json()
@@ -145,7 +145,7 @@ async def test_delete_project_returns_no_content(
         PaginationDTO(),
     )
     response = await project_http_client.delete(
-        '/projects/12', headers={'Authorization': 'Bearer valid'}
+        '/projects/12', cookies={'jwt': 'valid'}
     )
     assert response.status_code == HTTPStatus.NO_CONTENT
 
@@ -158,7 +158,7 @@ async def test_delete_project_maps_domain_error(
 ):
     project_route_dependencies[0].get_project.return_value = None
     response = await project_http_client.delete(
-        '/projects/42', headers={'Authorization': 'Bearer valid'}
+        '/projects/42', cookies={'jwt': 'valid'}
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
     assert response.json()['detail'] == 'Project 42 not found'
@@ -173,7 +173,7 @@ async def test_client_authentication_error_is_project_error(
         2
     ].get_current_user.side_effect = ProjectUserAuthenticationException()
     response = await project_http_client.get(
-        '/projects', headers={'Authorization': 'Bearer invalid'}
+        '/projects', cookies={'jwt': 'invalid'}
     )
     assert response.status_code == HTTPStatus.UNAUTHORIZED
 
@@ -188,7 +188,7 @@ async def test_project_domain_errors_are_handled(
         0
     ].get_projects_for_member.side_effect = ProjectNotFoundException(42)
     response = await project_http_client.get(
-        '/projects', headers={'Authorization': 'Bearer valid'}
+        '/projects', cookies={'jwt': 'valid'}
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
     assert response.json()['detail'] == 'Project 42 not found'

@@ -1,9 +1,8 @@
 from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from identity.dtos.user import (
     CreateUserDTO,
@@ -37,18 +36,19 @@ def create_user_router(
     repository_factory: Callable[[], Awaitable[IUserRepository]],
 ) -> APIRouter:
     router = APIRouter(prefix='/users', tags=['users'])
-    bearer = HTTPBearer(auto_error=False)
 
-    async def authenticated_user(
-        credentials: HTTPAuthorizationCredentials | None,
-    ) -> UserDTO:
-        if credentials is None:
-            raise InvalidTokenException()
+    async def resolve_identity_user(access_token: str) -> UserDTO:
         return await get_current_user(
             await repository_factory(),
             token_provider_factory(),
-            credentials.credentials,
+            access_token,
         )
+
+    async def resolve_current_user(cookies) -> UserDTO:
+        access_token = cookies.get('jwt')
+        if not access_token:
+            raise InvalidTokenException()
+        return await resolve_identity_user(access_token)
 
     @router.post('', response_model=UserSchema, status_code=HTTPStatus.CREATED)
     async def post_user(
@@ -80,11 +80,11 @@ def create_user_router(
 
     @router.put('', response_model=UserSchema)
     async def put_user(
+        request: Request,
         data: UpdateUserSchema,
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> UserDTO | JSONResponse:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(request.cookies)
             repo = await repository_factory()
             return await update_user(
                 repo,
@@ -96,11 +96,11 @@ def create_user_router(
 
     @router.patch('/change-password', response_model=UserSchema)
     async def patch_password(
+        request: Request,
         data: UpdateUserPasswordSchema,
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> UserDTO | JSONResponse:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(request.cookies)
             repo = await repository_factory()
             return await change_password(
                 repo,

@@ -1,9 +1,8 @@
 from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from identity.dtos.auth import LoginDTO
 from identity.dtos.user import UserDTO
@@ -14,12 +13,11 @@ from identity.repositories.token import (
 )
 from identity.repositories.user import IUserRepository
 from identity.schemas.auth import (
-    AuthenticationSchema,
     LoginSchema,
-    RefreshTokenSchema,
 )
 from identity.security.jwt import ITokenProvider
 from identity.security.password_hasher import PasswordHasher
+from identity.settings import get_settings
 from identity.use_cases.auth import login, logout, refresh_token
 from identity.use_cases.user import get_current_user
 
@@ -31,23 +29,22 @@ def create_auth_router(
     token_repository_factory: Callable[[], Awaitable[IRefreshTokenRepository]],
 ) -> APIRouter:
     router = APIRouter(tags=['auth'])
-    bearer = HTTPBearer(auto_error=False)
 
-    async def authenticated_user(
-        credentials: HTTPAuthorizationCredentials | None,
-    ) -> UserDTO:
-        if credentials is None:
-            raise InvalidTokenException()
+    async def resolve_identity_user(access_token: str) -> UserDTO:
         return await get_current_user(
             await user_repository_factory(),
             token_provider_factory(),
-            credentials.credentials,
+            access_token,
         )
 
-    @router.post('/login', response_model=AuthenticationSchema)
-    async def post_login(
-        data: LoginSchema,
-    ) -> AuthenticationSchema | JSONResponse:
+    async def resolve_current_user(cookies) -> UserDTO:
+        access_token = cookies.get('jwt')
+        if not access_token:
+            raise InvalidTokenException()
+        return await resolve_identity_user(access_token)
+
+    @router.post('/login')
+    async def post_login(data: LoginSchema) -> JSONResponse:
         try:
             user_repo = await user_repository_factory()
             token_repo = await token_repository_factory()
@@ -58,28 +55,63 @@ def create_auth_router(
                 token_provider_factory(),
                 LoginDTO(email=str(data.email), password=data.password),
             )
-            return AuthenticationSchema(
-                access_token=result.access_token,
-                refresh_token=result.refresh_token,
+            response = JSONResponse({'message': 'Login sucess'})
+            response.set_cookie(
+                key='jwt',
+                value=result.access_token,
+                secure=True,
+                httponly=True,
+                samesite='lax',
+                max_age=get_settings().JWT_EXPIRES_IN_MINUTES * 60,
+                path='/',
             )
+
+            response.set_cookie(
+                key='refresh_token',
+                value=result.refresh_token,
+                secure=True,
+                httponly=True,
+                samesite='lax',
+                max_age=7 * 24 * 60 * 60,
+                path='/',
+            )
+
+            return response
         except IdentityException as error:
             return handle_identity_error(error)
 
-    @router.post('/refresh-token', response_model=AuthenticationSchema)
-    async def post_refresh_token(
-        data: RefreshTokenSchema,
-    ) -> AuthenticationSchema | JSONResponse:
+    @router.post('/refresh-token')
+    async def post_refresh_token(request: Request) -> JSONResponse:
         try:
+            token = request.cookies.get('refresh_token', '')
             token_repo = await token_repository_factory()
             result = await refresh_token(
                 token_repo,
                 token_provider_factory(),
-                data.refresh_token,
+                token,
             )
-            return AuthenticationSchema(
-                access_token=result.access_token,
-                refresh_token=result.refresh_token,
+            response = JSONResponse({'message': 'Refresh sucess'})
+            response.set_cookie(
+                key='jwt',
+                value=result.access_token,
+                secure=True,
+                httponly=True,
+                samesite='lax',
+                max_age=get_settings().JWT_EXPIRES_IN_MINUTES * 60,
+                path='/',
             )
+
+            response.set_cookie(
+                key='refresh_token',
+                value=result.refresh_token,
+                secure=True,
+                httponly=True,
+                samesite='lax',
+                max_age=7 * 24 * 60 * 60,
+                path='/',
+            )
+
+            return response
         except IdentityException as error:
             return handle_identity_error(error)
 
@@ -90,14 +122,18 @@ def create_auth_router(
         response_class=Response,
     )
     async def post_logout(
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        response: Response,
+        request: Request,
     ) -> Response:
         try:
-            user = await authenticated_user(credentials)
+            user = await resolve_current_user(request.cookies)
             token_repo = await token_repository_factory()
             await logout(token_repo, user.id)
+            response.delete_cookie(key='jwt', path='/')
+            response.delete_cookie(key='refresh_token', path='/')
+            response.status_code = HTTPStatus.NO_CONTENT
         except IdentityException as error:
             return handle_identity_error(error)
-        return Response(status_code=HTTPStatus.NO_CONTENT)
+        return response
 
     return router

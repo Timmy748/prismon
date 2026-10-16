@@ -2,9 +2,8 @@
 from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from project.clients.client_user import IUserClient
 from project.dtos.document import (
@@ -42,28 +41,24 @@ def create_documents_router(
     router = APIRouter(
         prefix='/projects/{project_id}/documents', tags=['documents']
     )
-    bearer = HTTPBearer(auto_error=False)
 
-    async def current_user(
-        credentials: HTTPAuthorizationCredentials | None,
-    ):
-        if credentials is None:
+    async def resolve_current_user(cookies):
+        access_token = cookies.get('jwt')
+        if not access_token:
             raise ProjectUserAuthenticationException()
-        return await user_client_factory().get_current_user(
-            credentials.credentials
-        )
+        return await user_client_factory().get_current_user(access_token)
 
     @router.get('', response_model=DocumentPageSchema)
     async def list_documents(
+        request: Request,
         project_id: int,
         cursor: str | None = Query(default=None),
         limit: int = Query(default=50, ge=1, le=100),
         name: str | None = Query(default=None),
         status: DocumentStatus | None = Query(default=None),
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ):
         try:
-            user = await current_user(credentials)
+            user = await resolve_current_user(request.cookies)
             page = await get_documents(
                 await project_repository_factory(),
                 await member_repository_factory(),
@@ -88,14 +83,14 @@ def create_documents_router(
         '', response_model=DocumentSchema, status_code=HTTPStatus.CREATED
     )
     async def post_document(
+        request: Request,
         project_id: int,
         name: str = Form(...),
         description: str | None = Form(default=None),
         file: UploadFile = File(...),
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ):
         try:
-            user = await current_user(credentials)
+            user = await resolve_current_user(request.cookies)
             dto = await add_document(
                 await project_repository_factory(),
                 await member_repository_factory(),
@@ -114,15 +109,15 @@ def create_documents_router(
 
     @router.put('/{document_id}', response_model=DocumentSchema)
     async def put_document(
+        request: Request,
         project_id: int,
         document_id: int,
         name: str | None = Form(default=None),
         description: str | None = Form(default=None),
         file: UploadFile | None = File(default=None),
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ):
         try:
-            user = await current_user(credentials)
+            user = await resolve_current_user(request.cookies)
             dto = await update_document(
                 await project_repository_factory(),
                 await member_repository_factory(),
@@ -140,12 +135,12 @@ def create_documents_router(
 
     @router.delete('/{document_id}', status_code=HTTPStatus.NO_CONTENT)
     async def remove_document(
+        request: Request,
         project_id: int,
         document_id: int,
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ):
         try:
-            user = await current_user(credentials)
+            user = await resolve_current_user(request.cookies)
             await delete_document(
                 await project_repository_factory(),
                 await member_repository_factory(),

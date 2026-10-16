@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 from http import HTTPStatus
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-from fastapi.security import HTTPAuthorizationCredentials
 
 from agents.dtos.chat import ChatDTO
 from agents.dtos.message import MessageDTO
@@ -65,7 +65,7 @@ def test_list_chat_messages_returns_page_and_forwards_pagination(
 
     response = client.get(
         '/chats/3/messages?limit=8&cursor=' + encoded_cursor,
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
 
     assert (
@@ -136,9 +136,7 @@ def test_list_chat_messages_maps_chat_not_found(
     )
     client = api_client(router)
 
-    response = client.get(
-        '/chats/3/messages', headers={'Authorization': 'Bearer token'}
-    )
+    response = client.get('/chats/3/messages', cookies={'jwt': 'token'})
 
     assert response.status_code == HTTPStatus.NOT_FOUND and response.json() == {
         'detail': 'Chat 3 not found'
@@ -162,7 +160,7 @@ def test_list_chat_messages_rejects_invalid_cursor(
 
     response = client.get(
         '/chats/3/messages?cursor=invalid',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
 
     assert (
@@ -198,7 +196,7 @@ def test_post_message_to_existing_chat_returns_created_message(
     response = client.post(
         '/chats/messages',
         json={'chat_id': 3, 'text': 'hello'},
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
 
     assert response.status_code == HTTPStatus.CREATED and response.json() == {
@@ -242,7 +240,7 @@ def test_post_message_without_chat_creates_chat_and_message(
     response = client.post(
         '/chats/messages',
         json={'project_id': 7, 'text': 'hello'},
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
 
     assert (
@@ -269,7 +267,7 @@ def test_post_message_requires_project_id_when_chat_is_omitted(
     response = client.post(
         '/chats/messages',
         json={'text': 'hello'},
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
@@ -299,8 +297,8 @@ async def test_post_message_defensive_project_id_check(
 
     with pytest.raises(HTTPException, match='project_id is required'):
         await endpoint(
+            SimpleNamespace(cookies={'jwt': 'token'}),
             data,
-            HTTPAuthorizationCredentials(scheme='Bearer', credentials='token'),
         )
 
 
@@ -322,7 +320,7 @@ def test_post_message_rejects_blank_text(
     response = client.post(
         '/chats/messages',
         json={'chat_id': 3, 'text': '  '},
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
@@ -351,7 +349,7 @@ def test_post_message_maps_permission_error(
     response = client.post(
         '/chats/messages',
         json={'chat_id': 3, 'text': 'hello'},
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
 
     assert response.status_code == HTTPStatus.FORBIDDEN and response.json() == {
@@ -386,7 +384,7 @@ def test_patch_chat_returns_updated_chat(
     response = client.patch(
         '/chats/3',
         json={'title': 'Updated'},
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
 
     assert (
@@ -413,7 +411,7 @@ def test_patch_chat_rejects_title_over_limit(
     response = client.patch(
         '/chats/3',
         json={'title': 'x' * 257},
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
@@ -442,7 +440,7 @@ def test_patch_chat_maps_missing_permission(
     response = client.patch(
         '/chats/3',
         json={'title': 'Updated'},
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
 
     assert response.status_code == HTTPStatus.FORBIDDEN
@@ -468,9 +466,7 @@ def test_delete_chat_returns_no_content(
     )
     client = api_client(router)
 
-    response = client.delete(
-        '/chats/3', headers={'Authorization': 'Bearer token'}
-    )
+    response = client.delete('/chats/3', cookies={'jwt': 'token'})
 
     assert (
         response.status_code == HTTPStatus.NO_CONTENT
@@ -497,9 +493,7 @@ def test_delete_chat_maps_chat_not_found(
     )
     client = api_client(router)
 
-    response = client.delete(
-        '/chats/3', headers={'Authorization': 'Bearer token'}
-    )
+    response = client.delete('/chats/3', cookies={'jwt': 'token'})
 
     assert response.status_code == HTTPStatus.NOT_FOUND
 
@@ -530,7 +524,7 @@ def test_list_project_chats_returns_page(
 
     response = client.get(
         '/projects/7/chats?cursor=' + encoded_cursor + '&limit=4',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
 
     assert response.status_code == HTTPStatus.OK and response.json() == {
@@ -569,9 +563,7 @@ def test_list_project_chats_maps_permission_error(
     )
     client = api_client(router)
 
-    response = client.get(
-        '/projects/7/chats', headers={'Authorization': 'Bearer token'}
-    )
+    response = client.get('/projects/7/chats', cookies={'jwt': 'token'})
 
     assert response.status_code == HTTPStatus.FORBIDDEN
 

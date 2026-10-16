@@ -126,7 +126,7 @@ async def test_put_user_success(
     response = await user_client.put(
         '/users',
         json={'username': 'ana_updated', 'email': 'ana_updated@example.com'},
-        headers={'Authorization': 'Bearer valid-access-token'},
+        cookies={'jwt': 'valid-access-token'},
     )
 
     assert response.status_code == HTTPStatus.OK
@@ -176,7 +176,7 @@ async def test_patch_password_success(
             'old_password': 'old_password_123',
             'new_password': 'new_password_123',
         },
-        headers={'Authorization': 'Bearer valid-access-token'},
+        cookies={'jwt': 'valid-access-token'},
     )
 
     assert response.status_code == HTTPStatus.OK

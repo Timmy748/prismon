@@ -35,7 +35,7 @@ async def test_client_authentication_error_is_mapped(
         4
     ].get_current_user.side_effect = ProjectUserAuthenticationException()
     response = await document_client.get(
-        '/projects/2/documents', headers={'Authorization': 'Bearer invalid'}
+        '/projects/2/documents', cookies={'jwt': 'invalid'}
     )
     assert response.status_code == 401
 
@@ -44,7 +44,7 @@ async def test_client_authentication_error_is_mapped(
 async def test_list_documents_returns_page(document_client):
     response = await document_client.get(
         '/projects/2/documents?limit=10',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
     assert response.status_code == 200
     assert response.json()['items'][0]['id'] == 4
@@ -59,7 +59,7 @@ async def test_list_forwards_cursor_and_filters(document_client, document_api):
     response = await document_client.get(
         f'/projects/2/documents?cursor={encode_cursor(cursor)}&limit=10'
         '&name=Brief&status=published',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
     assert response.status_code == 200
     call = document_api[3].get_documents.await_args
@@ -71,7 +71,7 @@ async def test_list_forwards_cursor_and_filters(document_client, document_api):
 async def test_invalid_cursor_is_bad_request(document_client, document_api):
     response = await document_client.get(
         '/projects/2/documents?cursor=bad',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
     )
     assert response.status_code == 400
     document_api[3].get_documents.assert_not_awaited()
@@ -81,7 +81,7 @@ async def test_invalid_cursor_is_bad_request(document_client, document_api):
 async def test_upload_document_multipart(document_client, document_api):
     response = await document_client.post(
         '/projects/2/documents',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
         data={'name': 'Brief', 'description': 'Project brief'},
         files={'file': ('brief.pdf', b'contents', 'application/pdf')},
     )
@@ -94,7 +94,7 @@ async def test_upload_document_multipart(document_client, document_api):
 async def test_update_document_replaces_file(document_client, document_api):
     response = await document_client.put(
         '/projects/2/documents/4',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
         data={'name': 'Updated'},
         files={'file': ('new.pdf', b'new contents', 'application/pdf')},
     )
@@ -109,7 +109,7 @@ async def test_update_document_metadata_without_file(
 ):
     response = await document_client.put(
         '/projects/2/documents/4',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
         data={'name': 'Updated'},
     )
     assert response.status_code == 200
@@ -121,7 +121,7 @@ async def test_delete_document_removes_metadata_and_file(
     document_client, document_api
 ):
     response = await document_client.delete(
-        '/projects/2/documents/4', headers={'Authorization': 'Bearer token'}
+        '/projects/2/documents/4', cookies={'jwt': 'token'}
     )
     assert response.status_code == 204
     document_api[3].delete_document.assert_awaited_once_with(4)
@@ -149,7 +149,7 @@ async def test_document_permission_denial_is_forbidden(
     )
     response = await document_client.post(
         '/projects/2/documents',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
         data={'name': 'Brief'},
         files={'file': ('brief.pdf', b'contents', 'application/pdf')},
     )
@@ -161,7 +161,7 @@ async def test_document_permission_denial_is_forbidden(
 async def test_missing_document_is_not_found(document_client, document_api):
     document_api[3].get_document.return_value = None
     response = await document_client.delete(
-        '/projects/2/documents/999', headers={'Authorization': 'Bearer token'}
+        '/projects/2/documents/999', cookies={'jwt': 'token'}
     )
     assert response.status_code == 404
     document_api[3].delete_document.assert_not_awaited()
@@ -174,7 +174,7 @@ async def test_update_missing_document_is_not_found(
     document_api[3].get_document.return_value = None
     response = await document_client.put(
         '/projects/2/documents/999',
-        headers={'Authorization': 'Bearer token'},
+        cookies={'jwt': 'token'},
         data={'name': 'Missing'},
     )
     assert response.status_code == 404
@@ -190,6 +190,6 @@ async def test_project_exception_maps_to_forbidden(
         'document:read'
     )
     response = await document_client.get(
-        '/projects/2/documents', headers={'Authorization': 'Bearer token'}
+        '/projects/2/documents', cookies={'jwt': 'token'}
     )
     assert response.status_code == 403
