@@ -22,7 +22,7 @@ def test_list_workflows_maps_page_to_http_response(
                 12,
                 'Research',
                 'Analyze data',
-                '/workflow.png',
+                '1.0.0',
                 timestamp,
                 timestamp,
             )
@@ -41,7 +41,7 @@ def test_list_workflows_maps_page_to_http_response(
                 'id': 12,
                 'name': 'Research',
                 'description': 'Analyze data',
-                'picture': '/workflow.png',
+                'version': '1.0.0',
                 'created_at': '2025-01-02T00:00:00Z',
                 'updated_at': '2025-01-02T00:00:00Z',
             }

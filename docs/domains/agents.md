@@ -14,12 +14,18 @@ Um workflow possui os seguintes atributos:
 * `id`
 * `name`
 * `description`
-* `picture`
+* `version`
 * `created_at`
 * `updated_at`
 
 Cada workflow deve possuir um nome único, pois será identificado pelo
 nome no código.
+
+As implementações executáveis dos workflows ficam em `agents/workflows/`.
+Cada implementação declara nome, descrição e versão e define como executar,
+retomar e construir seu grafo LangGraph. O seed carrega os módulos dessa pasta
+e sincroniza os metadados registrados com a tabela `workflows`; pode ser
+executado na raiz do projeto com `PYTHONPATH=src python -m agents.seed_workflows`.
 
 ### Chat
 

@@ -40,11 +40,11 @@ async def test_get_workflows_maps_dtos_and_orders_desc(
     page = await repository.get_workflows()
 
     assert [
-        (item.id, item.name, item.description, item.picture)
+        (item.id, item.name, item.description, item.version)
         for item in page.items
     ] == [
-        (workflows[1].id, 'Workflow 1', 'Description 1', 'Picture 1'),
-        (workflows[0].id, 'Workflow 0', 'Description 0', 'Picture 0'),
+        (workflows[1].id, 'Workflow 1', 'Description 1', '1.0.0'),
+        (workflows[0].id, 'Workflow 0', 'Description 0', '1.0.0'),
     ]
 
 
@@ -124,7 +124,7 @@ async def _create_workflows(
         Workflow(
             name=f'Workflow {index}',
             description=f'Description {index}',
-            picture=f'Picture {index}',
+            version='1.0.0',
         )
         for index in range(count)
     ]
