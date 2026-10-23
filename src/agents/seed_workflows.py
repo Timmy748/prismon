@@ -1,26 +1,19 @@
 import asyncio
-from importlib import import_module
-from pkgutil import iter_modules
-from types import ModuleType
 
 from sqlalchemy import select
 
-import agents.workflows as workflows_package
 from agents.database import get_session_factory
 from agents.entities.workflow import Workflow
-from agents.workflows.registry import WorkflowRegistry, workflow_registry
+from agents.workflows.registry import (
+    WorkflowRegistry,
+    workflow_registry_factory,
+)
 
 
-def _load_workflow_modules(package: ModuleType) -> None:  # pragma: no cover
-    for module in iter_modules(package.__path__):
-        if module.name not in {'base', 'registry'}:
-            import_module(f'{workflows_package.__name__}.{module.name}')
-
-
-async def seed_workflows(
-    registry: WorkflowRegistry = workflow_registry,
-) -> None:
+async def seed_workflows(registry: WorkflowRegistry | None = None) -> None:
     session_factory = get_session_factory()
+    if registry is None:
+        registry = workflow_registry_factory()
 
     async with session_factory() as session:
         existing_workflows = {
@@ -51,7 +44,6 @@ async def seed_workflows(
 
 
 def main() -> None:  # pragma: no cover
-    _load_workflow_modules(workflows_package)
     asyncio.run(seed_workflows())
 
 

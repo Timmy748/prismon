@@ -350,8 +350,13 @@ poetry.toml
 pyrightconfig.json
 
 
+.agents/
+.codex/
+.aws/
 
 # End of https://www.toptal.com/developers/gitignore/api/python
+
+
 
 
 

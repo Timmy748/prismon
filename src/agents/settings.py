@@ -9,7 +9,7 @@ class Settings(BaseSettings):  # pragma: no cover
         case_sensitive=False, extra='ignore', env_file='.env'
     )
     DATABASE_URL: str = field(init=False)
-    OLLAMA_BASE_URL: str = 'http://localhost:11434'
+    OLLAMA_BASE_URL: str = 'http://ollama:11434'
     OLLAMA_MODEL: str = 'bonsai-2:4b'
     OLLAMA_TEMPERATURE: float = 0.0
 

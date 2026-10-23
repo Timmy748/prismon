@@ -13,20 +13,23 @@ def test_registry_registers_workflow_with_decorator(example_workflow):
     assert registry.list_workflows() == [RegisteredWorkflow]
 
 
-def test_registry_get_workflow_returns_an_instance(example_workflow):
+def test_registry_get_workflow_returns_an_instance(
+    example_workflow, workflow_engine
+):
     registry = WorkflowRegistry()
     registry.registry(example_workflow)
 
-    workflow = registry.get_workflow('example')
+    workflow = registry.get_workflow('example', engine=workflow_engine)
 
     assert isinstance(workflow, example_workflow)
+    assert workflow._engine is workflow_engine
 
 
-def test_registry_get_workflow_raises_for_unknown_name():
+def test_registry_get_workflow_raises_for_unknown_name(workflow_engine):
     registry = WorkflowRegistry()
 
     with pytest.raises(KeyError, match="Workflow 'missing' is not registered"):
-        registry.get_workflow('missing')
+        registry.get_workflow('missing', engine=workflow_engine)
 
 
 def test_registry_rejects_class_that_does_not_inherit_workflow_execution():

@@ -17,6 +17,7 @@ dependencies = [
   "psycopg[binary]>=3.3.6",
   "langchain>=1.4.6",
   "langchain-ollama>=1.0.0",
+  "langgraph>=1.2.16",
 ]
 
 [tool.ruff]

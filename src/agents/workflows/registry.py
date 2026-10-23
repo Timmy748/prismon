@@ -1,3 +1,9 @@
+from importlib import import_module
+from pkgutil import iter_modules
+from types import ModuleType
+
+import agents.workflows as workflows_package
+from agents.llm_engine.base import ILLMEngine
 from agents.workflows.base import WorkflowExecution
 
 
@@ -29,15 +35,26 @@ class WorkflowRegistry:
         self._workflows[workflow_class.name] = workflow_class
         return workflow_class
 
-    def get_workflow(self, name: str) -> WorkflowExecution:
+    def get_workflow(self, name: str, engine: ILLMEngine) -> WorkflowExecution:
         try:
             workflow_class = self._workflows[name]
         except KeyError as error:
             raise KeyError(f'Workflow {name!r} is not registered') from error
-        return workflow_class()
+        return workflow_class(engine=engine)
 
     def list_workflows(self) -> list[type[WorkflowExecution]]:
         return list(self._workflows.values())
+
+
+def _load_workflow_modules(package: ModuleType) -> None:  # pragma: no cover
+    for module in iter_modules(package.__path__):
+        if module.name not in {'base', 'registry'}:
+            import_module(f'{workflows_package.__name__}.{module.name}')
+
+
+def workflow_registry_factory():  # pragma: no cover
+    _load_workflow_modules(workflows_package)
+    return workflow_registry
 
 
 workflow_registry = WorkflowRegistry()

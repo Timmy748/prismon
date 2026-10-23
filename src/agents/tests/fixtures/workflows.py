@@ -1,10 +1,12 @@
 from collections.abc import Sequence
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from langchain_core.runnables import Runnable, RunnableLambda
 
 from agents.entities.workflow import Workflow
+from agents.llm_engine.base import ILLMEngine
 from agents.workflows.base import WorkflowExecution
 from agents.workflows.registry import WorkflowRegistry
 
@@ -72,6 +74,11 @@ def example_workflow_registry(example_workflow):
     registry = WorkflowRegistry()
     registry.registry(example_workflow)
     return registry
+
+
+@pytest.fixture
+def workflow_engine():
+    return Mock(spec=ILLMEngine)
 
 
 @pytest.fixture

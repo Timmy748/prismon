@@ -88,4 +88,10 @@ Obtém os workflows disponíveis.
 
 Obtém as mensagens de um chat.
 
-#### `POST /chats/{id}/messages`
+#### `POST /chats/messages`
+
+Envia uma mensagem do usuário, executa o workflow `chat` com as últimas
+100 mensagens da conversa e retorna a resposta do assistente. A mensagem do
+assistente é persistida como filha da mensagem do usuário. A execução é
+síncrona; falhas do modelo ainda deixam a mensagem do usuário salva e precisam
+de uma política de retry/status em uma evolução futura.

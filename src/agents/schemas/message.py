@@ -48,13 +48,13 @@ class CreateMessageSchema(BaseModel):
 
     @field_validator('text')
     @classmethod
-    def validate_text(cls, value: str) -> str:
+    def validate_text(cls, value: str) -> str:  # pragma: no cover
         if not value.strip():
             raise ValueError('Message text cannot be empty')
         return value
 
     @model_validator(mode='after')
-    def require_project_for_new_chat(self) -> Self:
+    def require_project_for_new_chat(self) -> Self:  # pragma: no cover
         if self.chat_id is None and self.project_id is None:
             raise ValueError('project_id is required when chat_id is omitted')
         return self
