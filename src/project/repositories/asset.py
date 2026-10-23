@@ -4,7 +4,6 @@ from typing import Protocol
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from project.database import get_session_factory
 from project.dtos.asset import AssetDTO
 from project.dtos.page import CursorPage, PaginationDTO
 from project.entities.asset import Asset, AssetStatus
@@ -113,7 +112,7 @@ class AssetRepository:
             status=status,
         )
         self._session.add(row)
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)
 
@@ -136,7 +135,7 @@ class AssetRepository:
             row.description = description
         if status is not None:
             row.status = status
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)
 
@@ -145,10 +144,4 @@ class AssetRepository:
         if row is None:
             return
         await self._session.delete(row)
-        await self._session.commit()
-
-
-async def create_asset_repository() -> IAssetRepository:  # pragma: no cover
-    session_maker = get_session_factory()
-    async with session_maker() as session:
-        return AssetRepository(session)
+        await self._session.flush()

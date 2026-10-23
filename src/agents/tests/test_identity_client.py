@@ -138,8 +138,8 @@ def test_create_identity_client_wires_identity_api():
     with (
         patch('agents.clients.identity.IdentityPublicAPI') as api_factory,
         patch(
-            'agents.clients.identity.create_user_repository'
-        ) as repository_factory,
+            'agents.clients.identity.create_identity_unit_of_work'
+        ) as unit_of_work_factory,
         patch('agents.clients.identity.create_token_provider') as token_factory,
     ):
         api = Mock()
@@ -149,5 +149,8 @@ def test_create_identity_client_wires_identity_api():
 
     assert (result._identity_api, api_factory.call_args) == (
         api,
-        call(repository_factory, token_factory),
+        call(
+            unit_of_work_factory=unit_of_work_factory,
+            token_provider_factory=token_factory,
+        ),
     )

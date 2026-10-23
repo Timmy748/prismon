@@ -4,7 +4,6 @@ from typing import Protocol
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from project.database import get_session_factory
 from project.dtos.document import DocumentDTO
 from project.dtos.page import CursorPage, PaginationDTO
 from project.entities.document import Document, DocumentStatus
@@ -113,7 +112,7 @@ class DocumentRepository:
             status=status,
         )
         self._session.add(row)
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)
 
@@ -136,7 +135,7 @@ class DocumentRepository:
             row.description = description
         if status is not None:
             row.status = status
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)
 
@@ -145,12 +144,4 @@ class DocumentRepository:
         if row is None:
             return
         await self._session.delete(row)
-        await self._session.commit()
-
-
-async def create_document_repository() -> (
-    IDocumentRepository
-):  # pragma: no cover
-    session_maker = get_session_factory()
-    async with session_maker() as session:
-        return DocumentRepository(session)
+        await self._session.flush()

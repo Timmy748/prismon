@@ -54,11 +54,21 @@ acesso e persistência dos dados.
 
 As demais camadas do módulo devem interagir com a persistência por meio
 dos repositories, evitando que detalhes específicos da implementação do
-banco de dados se espalhem pelo domínio.
+banco de dados se espalhem pelo domínio. Os repositories são criados pelo
+Unit of Work do próprio módulo e compartilham a mesma sessão.
 
 ```text
-Use Case → Repository → Database
+Use Case → Unit of Work → Repository → Database
 ```
+
+Cada módulo com persistência possui seu próprio Unit of Work assíncrono e
+um `Protocol` que define sua interface. Ele abre a sessão e disponibiliza os
+repositories ao entrar em `async with`. Os use cases dependem do protocolo,
+e decidem quando confirmar a transação com `commit()`; também podem chamar
+`rollback()` explicitamente. Cada módulo fornece uma factory sem argumentos
+para criar o UoW concreto. Se uma exceção
+escapar do contexto, o Unit of Work faz rollback e fecha a sessão. As
+factories individuais de repository não são usadas para compor as camadas.
 
 ## Rotas da API
 
@@ -96,7 +106,7 @@ e aplicar as regras de negócio necessárias para realizá-los.
 
 Eles podem depender de:
 
-* repositories, para persistência e acesso à base de dados;
+* Unit of Work, para persistência e acesso aos repositories;
 * clients, para comunicação com outros domínios.
 
 Os use cases recebem DTOs e outras informações fornecidas pelas camadas
@@ -107,7 +117,9 @@ Route
   ↓
 Use Case
   ↓
-Repository / Client
+Unit of Work → Repository
+  ↓
+Client
 ```
 
 A camada de use cases não deve depender de detalhes relacionados ao

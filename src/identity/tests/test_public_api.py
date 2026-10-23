@@ -6,7 +6,7 @@ from identity.dtos.user import UserDTO
 
 
 @pytest.mark.asyncio
-async def test_public_api_get_by_id(identity_public_api):
+async def test_public_api_get_by_id(identity_public_api, mock_unit_of_work):
     api, user_repo, _ = identity_public_api
     user = UserDTO(
         id=15,
@@ -22,10 +22,14 @@ async def test_public_api_get_by_id(identity_public_api):
 
     assert result == user
     user_repo.get_user_by_id.assert_awaited_once_with(15)
+    mock_unit_of_work.__aenter__.assert_awaited_once()
+    mock_unit_of_work.__aexit__.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_public_api_get_current_user(identity_public_api):
+async def test_public_api_get_current_user(
+    identity_public_api, mock_unit_of_work
+):
     api, user_repo, token_provider = identity_public_api
     user = UserDTO(
         id=15,
@@ -43,3 +47,5 @@ async def test_public_api_get_current_user(identity_public_api):
     assert result == user
     token_provider.decode_access_token.assert_called_once_with('valid-token')
     user_repo.get_user_by_id.assert_awaited_once_with(15)
+    mock_unit_of_work.__aenter__.assert_awaited_once()
+    mock_unit_of_work.__aexit__.assert_awaited_once()

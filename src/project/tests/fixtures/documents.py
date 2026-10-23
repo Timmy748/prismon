@@ -19,6 +19,7 @@ from project.repositories.member import IMemberRepository
 from project.repositories.project import IProjectRepository
 from project.routes.documents import create_documents_router
 from project.storage import IStorage
+from project.tests.fixtures.mock import make_unit_of_work
 
 
 @pytest.fixture
@@ -54,21 +55,14 @@ def document_api():
     document_repo.create_document.return_value = document
     document_repo.update_document.return_value = document
 
-    async def project_factory():
-        return project_repo
-
-    async def member_factory():
-        return member_repo
-
-    async def document_factory():
-        return document_repo
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
 
     app = FastAPI()
     app.include_router(
         create_documents_router(
-            project_factory,
-            member_factory,
-            document_factory,
+            lambda: unit_of_work,
             lambda: storage,
             lambda: user_client,
         )

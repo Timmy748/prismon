@@ -5,14 +5,13 @@ from project.exceptions import (
     InsufficientProjectPermissionException,
     ProjectNotFoundException,
 )
-from project.repositories.member import IMemberRepository
-from project.repositories.project import IProjectRepository
+from project.unit_of_work import IProjectUnitOfWork
 
 
 async def _active_member(
-    member_repo: IMemberRepository, project_id: int, user_id: int
+    uow: IProjectUnitOfWork, project_id: int, user_id: int
 ):
-    page = await member_repo.get_members(
+    page = await uow.member_repository.get_members(
         project_id,
         pagination=PaginationDTO(limit=100),
         user_id=user_id,
@@ -22,67 +21,66 @@ async def _active_member(
 
 
 async def _require_project_member(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
+    uow: IProjectUnitOfWork,
     project_id: int,
     user_id: int,
 ):
-    project = await project_repo.get_project(project_id)
-    member = await _active_member(member_repo, project_id, user_id)
+    project = await uow.project_repository.get_project(project_id)
+    member = await _active_member(uow, project_id, user_id)
     if project is None or member is None:
         raise ProjectNotFoundException(project_id)
     return project, member
 
 
 async def create_project(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
+    uow: IProjectUnitOfWork,
     owner_id: int,
     data: CreateProjectDTO,
 ) -> ProjectDTO:
-    project = await project_repo.create_project(data.name, owner_id)
-    await member_repo.create_member(
+    project = await uow.project_repository.create_project(data.name, owner_id)
+    await uow.member_repository.create_member(
         project.id, owner_id, MemberRole.OWNER, MemberStatus.ACTIVE
     )
+    await uow.commit()
     return project
 
 
 async def get_projects(
-    project_repo: IProjectRepository,
+    uow: IProjectUnitOfWork,
     user_id: int,
     name: str | None = None,
     pagination: PaginationDTO = PaginationDTO(),
 ) -> CursorPage[ProjectDTO]:
-    return await project_repo.get_projects_for_member(user_id, name, pagination)
+    return await uow.project_repository.get_projects_for_member(
+        user_id, name, pagination
+    )
 
 
 async def update_project(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
+    uow: IProjectUnitOfWork,
     project_id: int,
     user_id: int,
     data: UpdateProjectDTO,
 ) -> ProjectDTO:
-    _, member = await _require_project_member(
-        project_repo, member_repo, project_id, user_id
-    )
+    _, member = await _require_project_member(uow, project_id, user_id)
     if member.role not in (MemberRole.OWNER, MemberRole.DIRECTOR):
         raise InsufficientProjectPermissionException('project:update')
-    updated = await project_repo.update_project(project_id, name=data.name)
+    updated = await uow.project_repository.update_project(
+        project_id, name=data.name
+    )
     if updated is None:
         raise ProjectNotFoundException(project_id)
+    await uow.commit()
     return updated
 
 
 async def delete_project(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
+    uow: IProjectUnitOfWork,
     project_id: int,
     user_id: int,
 ) -> None:
-    _, member = await _require_project_member(
-        project_repo, member_repo, project_id, user_id
-    )
+    _, member = await _require_project_member(uow, project_id, user_id)
     if member.role not in (MemberRole.OWNER):
         raise InsufficientProjectPermissionException('project:delete')
-    await project_repo.delete_project(project_id)
+    await uow.project_repository.delete_project(project_id)
+    await uow.commit()

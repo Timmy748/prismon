@@ -10,6 +10,7 @@ from project.dtos.member import MemberDTO
 from project.dtos.user import UserDTO
 from project.entities.member import MemberRole, MemberStatus
 from project.routes.members import create_project_members_router
+from project.tests.fixtures.mock import make_unit_of_work
 
 
 def make_member(
@@ -39,18 +40,11 @@ def member_route_dependencies():
 @pytest.fixture
 def member_route_app(member_route_dependencies):
     project_repo, member_repo, user_client = member_route_dependencies
-
-    async def project_factory():
-        return project_repo
-
-    async def member_factory():
-        return member_repo
+    unit_of_work = make_unit_of_work(project_repo, member_repo)
 
     app = FastAPI()
     app.include_router(
-        create_project_members_router(
-            project_factory, member_factory, lambda: user_client
-        )
+        create_project_members_router(lambda: unit_of_work, lambda: user_client)
     )
     return app
 

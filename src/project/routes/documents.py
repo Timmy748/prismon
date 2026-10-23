@@ -1,5 +1,5 @@
 # ruff: noqa: PLR0913, PLR0917
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from http import HTTPStatus
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
@@ -17,11 +17,9 @@ from project.exceptions import (
     ProjectUserAuthenticationException,
 )
 from project.handlers.errors import handle_project_error
-from project.repositories.document import IDocumentRepository
-from project.repositories.member import IMemberRepository
-from project.repositories.project import IProjectRepository
 from project.schemas.document import DocumentPageSchema, DocumentSchema
 from project.storage import IStorage
+from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.documents import (
     add_document,
     delete_document,
@@ -32,9 +30,7 @@ from project.utils.pagination import decode_cursor, encode_cursor
 
 
 def create_documents_router(
-    project_repository_factory: Callable[[], Awaitable[IProjectRepository]],
-    member_repository_factory: Callable[[], Awaitable[IMemberRepository]],
-    document_repository_factory: Callable[[], Awaitable[IDocumentRepository]],
+    unit_of_work_factory: Callable[[], IProjectUnitOfWork],
     storage_factory: Callable[[], IStorage],
     user_client_factory: Callable[[], IUserClient],
 ) -> APIRouter:
@@ -59,17 +55,16 @@ def create_documents_router(
     ):
         try:
             user = await resolve_current_user(request.cookies)
-            page = await get_documents(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                await document_repository_factory(),
-                storage_factory(),
-                project_id,
-                user.id,
-                PaginationDTO(cursor=decode_cursor(cursor), limit=limit),
-                name,
-                status,
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                page = await get_documents(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    PaginationDTO(cursor=decode_cursor(cursor), limit=limit),
+                    name,
+                    status,
+                )
             return DocumentPageSchema(
                 items=[DocumentSchema.from_dto(item) for item in page.items],
                 limit=page.pagination.limit,
@@ -91,18 +86,17 @@ def create_documents_router(
     ):
         try:
             user = await resolve_current_user(request.cookies)
-            dto = await add_document(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                await document_repository_factory(),
-                storage_factory(),
-                project_id,
-                user.id,
-                CreateDocumentDTO(
-                    file='', name=name, description=description or ''
-                ),
-                await file.read(),
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                dto = await add_document(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    CreateDocumentDTO(
+                        file='', name=name, description=description or ''
+                    ),
+                    await file.read(),
+                )
             return DocumentSchema.from_dto(dto)
         except ProjectException as error:
             return handle_project_error(error)
@@ -118,17 +112,16 @@ def create_documents_router(
     ):
         try:
             user = await resolve_current_user(request.cookies)
-            dto = await update_document(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                await document_repository_factory(),
-                storage_factory(),
-                project_id,
-                user.id,
-                document_id,
-                UpdateDocumentDTO(name=name, description=description),
-                await file.read() if file is not None else None,
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                dto = await update_document(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    document_id,
+                    UpdateDocumentDTO(name=name, description=description),
+                    await file.read() if file is not None else None,
+                )
             return DocumentSchema.from_dto(dto)
         except ProjectException as error:
             return handle_project_error(error)
@@ -141,15 +134,14 @@ def create_documents_router(
     ):
         try:
             user = await resolve_current_user(request.cookies)
-            await delete_document(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                await document_repository_factory(),
-                storage_factory(),
-                project_id,
-                user.id,
-                document_id,
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                await delete_document(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    document_id,
+                )
             return Response(status_code=HTTPStatus.NO_CONTENT)
         except ProjectException as error:
             return handle_project_error(error)

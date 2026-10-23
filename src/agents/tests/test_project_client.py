@@ -7,6 +7,13 @@ from agents.clients import project as project_client_module
 from agents.clients.project import ProjectClient, create_project_client
 
 
+def _uow(member_repository):
+    unit_of_work = AsyncMock()
+    unit_of_work.member_repository = member_repository
+    unit_of_work.__aenter__.return_value = unit_of_work
+    return unit_of_work
+
+
 @pytest.mark.asyncio
 async def test_has_permission_returns_false_without_active_member():
     member_repository = Mock()
@@ -16,9 +23,10 @@ async def test_has_permission_returns_false_without_active_member():
             pagination=SimpleNamespace(limit=1),
         )
     )
-    repository_factory = AsyncMock(return_value=member_repository)
+    unit_of_work = _uow(member_repository)
+    unit_of_work_factory = Mock(return_value=unit_of_work)
     project_api = Mock()
-    client = ProjectClient(project_api, repository_factory)
+    client = ProjectClient(project_api, unit_of_work_factory)
 
     result = await client.has_permission(
         project_id=3,
@@ -27,6 +35,7 @@ async def test_has_permission_returns_false_without_active_member():
     )
 
     assert result is False
+    unit_of_work.__aexit__.assert_awaited_once_with(None, None, None)
 
 
 @pytest.mark.asyncio
@@ -45,7 +54,8 @@ async def test_has_permission_queries_only_active_member_for_user():
             pagination=SimpleNamespace(limit=1),
         )
     )
-    client = ProjectClient(Mock(), AsyncMock(return_value=member_repository))
+    unit_of_work = _uow(member_repository)
+    client = ProjectClient(Mock(), Mock(return_value=unit_of_work))
 
     await client.has_permission(3, 9, 'chat:read')
 
@@ -79,9 +89,8 @@ async def test_has_permission_delegates_member_role_and_requested_permission():
     )
     project_api = Mock()
     project_api.has_permission.return_value = True
-    client = ProjectClient(
-        project_api, AsyncMock(return_value=member_repository)
-    )
+    unit_of_work = _uow(member_repository)
+    client = ProjectClient(project_api, Mock(return_value=unit_of_work))
 
     await client.has_permission(3, 9, 'workflow:use')
 
@@ -109,9 +118,8 @@ async def test_has_permission_returns_project_permission_result():
     )
     project_api = Mock()
     project_api.has_permission.return_value = False
-    client = ProjectClient(
-        project_api, AsyncMock(return_value=member_repository)
-    )
+    unit_of_work = _uow(member_repository)
+    client = ProjectClient(project_api, Mock(return_value=unit_of_work))
 
     result = await client.has_permission(3, 9, 'chat:create')
 
@@ -125,10 +133,7 @@ def test_create_project_client_wires_public_api():
         api = Mock()
         api_factory = Mock(return_value=api)
         dependency_factories = {
-            'create_project_repository': Mock(),
-            'create_member_repository': Mock(),
-            'create_document_repository': Mock(),
-            'create_asset_repository': Mock(),
+            'create_project_unit_of_work': Mock(),
             'create_storage': Mock(),
         }
         monkeypatch.setattr(
@@ -142,17 +147,8 @@ def test_create_project_client_wires_public_api():
     assert (result._project_api, api_factory.call_args) == (
         api,
         call(
-            project_repository_factory=dependency_factories[
-                'create_project_repository'
-            ],
-            member_repository_factory=dependency_factories[
-                'create_member_repository'
-            ],
-            document_repository_factory=dependency_factories[
-                'create_document_repository'
-            ],
-            asset_repository_factory=dependency_factories[
-                'create_asset_repository'
+            unit_of_work_factory=dependency_factories[
+                'create_project_unit_of_work'
             ],
             storage_factory=dependency_factories['create_storage'],
         ),

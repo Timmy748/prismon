@@ -150,6 +150,46 @@ async def test_update_user_raises_when_not_found(
 
 
 @pytest.mark.asyncio
+async def test_update_user_changes_only_username(
+    user_repo: UserRepository,
+) -> None:
+    created = await user_repo.create_user(
+        username='john',
+        email='john@example.com',
+        password_hash='hashed',
+    )
+
+    updated = await user_repo.update_user(
+        id=created.id,
+        username='johnny',
+        email=None,
+    )
+
+    assert updated.username == 'johnny'
+    assert updated.email == 'john@example.com'
+
+
+@pytest.mark.asyncio
+async def test_update_user_changes_only_email(
+    user_repo: UserRepository,
+) -> None:
+    created = await user_repo.create_user(
+        username='john',
+        email='john@example.com',
+        password_hash='hashed',
+    )
+
+    updated = await user_repo.update_user(
+        id=created.id,
+        username=None,
+        email='johnny@example.com',
+    )
+
+    assert updated.username == 'john'
+    assert updated.email == 'johnny@example.com'
+
+
+@pytest.mark.asyncio
 async def test_change_user_password_returns_dto(
     user_repo: UserRepository,
 ) -> None:

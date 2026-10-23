@@ -15,17 +15,14 @@ def app() -> FastAPI:
 @pytest.fixture
 def user_router_app(
     app: FastAPI,
-    mock_user_repo,
+    mock_unit_of_work,
     mock_password_hasher,
     mock_token_provider,
 ) -> FastAPI:
-    async def user_repository_factory():
-        return mock_user_repo
-
     router = create_user_router(
         password_hasher_factory=lambda: mock_password_hasher,
         token_provider_factory=lambda: mock_token_provider,
-        repository_factory=user_repository_factory,
+        unit_of_work_factory=lambda: mock_unit_of_work,
     )
     app.include_router(router)
     return app
@@ -34,22 +31,14 @@ def user_router_app(
 @pytest.fixture
 def auth_router_app(
     app: FastAPI,
-    mock_user_repo,
-    mock_token_repo,
+    mock_unit_of_work,
     mock_password_hasher,
     mock_token_provider,
 ) -> FastAPI:
-    async def user_repository_factory():
-        return mock_user_repo
-
-    async def token_repository_factory():
-        return mock_token_repo
-
     router = create_auth_router(
         password_hasher_factory=lambda: mock_password_hasher,
         token_provider_factory=lambda: mock_token_provider,
-        user_repository_factory=user_repository_factory,
-        token_repository_factory=token_repository_factory,
+        unit_of_work_factory=lambda: mock_unit_of_work,
     )
     app.include_router(router)
     return app

@@ -1,6 +1,7 @@
 import pytest
 
 from project.public_api import ProjectPublicAPI
+from project.tests.fixtures.mock import make_unit_of_work
 
 
 @pytest.fixture
@@ -11,22 +12,14 @@ def public_api(
     mock_asset_repo,
     mock_storage,
 ):
-    async def project_repo_factory():
-        return mock_project_repo
-
-    async def member_repo_factory():
-        return mock_member_repo
-
-    async def document_repo_factory():
-        return mock_document_repo
-
-    async def asset_repo_factory():
-        return mock_asset_repo
+    unit_of_work = make_unit_of_work(
+        mock_project_repo,
+        mock_member_repo,
+        mock_document_repo,
+        mock_asset_repo,
+    )
 
     return ProjectPublicAPI(
-        project_repository_factory=project_repo_factory,
-        member_repository_factory=member_repo_factory,
-        document_repository_factory=document_repo_factory,
-        asset_repository_factory=asset_repo_factory,
         storage_factory=lambda: mock_storage,
+        unit_of_work_factory=lambda: unit_of_work,
     )

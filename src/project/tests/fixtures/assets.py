@@ -19,6 +19,7 @@ from project.repositories.member import IMemberRepository
 from project.repositories.project import IProjectRepository
 from project.routes.assets import create_assets_router
 from project.storage import IStorage
+from project.tests.fixtures.mock import make_unit_of_work
 
 
 @pytest.fixture
@@ -54,21 +55,14 @@ def asset_api():
     asset_repo.update_asset.return_value = asset
     asset_repo.get_asset.return_value = asset
 
-    async def project_factory():
-        return project_repo
-
-    async def member_factory():
-        return member_repo
-
-    async def asset_factory():
-        return asset_repo
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, asset_repo=asset_repo
+    )
 
     app = FastAPI()
     app.include_router(
         create_assets_router(
-            project_factory,
-            member_factory,
-            asset_factory,
+            lambda: unit_of_work,
             lambda: storage,
             lambda: user_client,
         )

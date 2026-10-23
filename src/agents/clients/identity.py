@@ -17,8 +17,8 @@ from identity.exceptions import (
     UserNotFoundException as IdentityUserNotFoundException,
 )
 from identity.public_api import IdentityPublicAPI
-from identity.repositories.user import create_user_repository
 from identity.security.jwt import create_token_provider
+from identity.unit_of_work import create_identity_unit_of_work
 
 
 class IIdentityClient(Protocol):
@@ -59,5 +59,8 @@ class IdentityClient:
 
 
 def create_identity_client() -> IdentityClient:
-    api = IdentityPublicAPI(create_user_repository, create_token_provider)
+    api = IdentityPublicAPI(
+        unit_of_work_factory=create_identity_unit_of_work,
+        token_provider_factory=create_token_provider,
+    )
     return IdentityClient(api)

@@ -25,7 +25,9 @@ from identity.use_cases.user import (
 
 
 @pytest.mark.asyncio
-async def test_create_user_success(mock_user_repo, mock_password_hasher):
+async def test_create_user_success(
+    mock_user_repo, mock_unit_of_work, mock_password_hasher
+):
     created_user = UserDTO(
         id=1,
         username='newuser',
@@ -42,17 +44,18 @@ async def test_create_user_success(mock_user_repo, mock_password_hasher):
         username='newuser', email='new@example.com', password_hash='secret'
     )
     result = await create_user(
-        user_repo=mock_user_repo,
+        uow=mock_unit_of_work,
         password_hasher=mock_password_hasher,
         data=dto,
     )
 
     assert result == created_user
+    mock_unit_of_work.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_create_user_email_already_exists(
-    mock_user_repo, mock_password_hasher
+    mock_user_repo, mock_unit_of_work, mock_password_hasher
 ):
     existing_user = UserDTO(
         id=1,
@@ -70,7 +73,7 @@ async def test_create_user_email_already_exists(
 
     with pytest.raises(UserAlreadyExistsException):
         await create_user(
-            user_repo=mock_user_repo,
+            uow=mock_unit_of_work,
             password_hasher=mock_password_hasher,
             data=dto,
         )
@@ -78,7 +81,7 @@ async def test_create_user_email_already_exists(
 
 @pytest.mark.asyncio
 async def test_create_user_username_already_exists(
-    mock_user_repo, mock_password_hasher
+    mock_user_repo, mock_unit_of_work, mock_password_hasher
 ):
     existing_user = UserDTO(
         id=1,
@@ -96,14 +99,14 @@ async def test_create_user_username_already_exists(
 
     with pytest.raises(UserAlreadyExistsException):
         await create_user(
-            user_repo=mock_user_repo,
+            uow=mock_unit_of_work,
             password_hasher=mock_password_hasher,
             data=dto,
         )
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_id_success(mock_user_repo):
+async def test_get_user_by_id_success(mock_user_repo, mock_unit_of_work):
     user_dto = UserDTO(
         id=1,
         username='testuser',
@@ -114,22 +117,23 @@ async def test_get_user_by_id_success(mock_user_repo):
     )
     mock_user_repo.get_user_by_id.return_value = user_dto
 
-    result = await get_user_by_id(user_repo=mock_user_repo, id=1)
+    result = await get_user_by_id(uow=mock_unit_of_work, id=1)
 
     assert result == user_dto
+    mock_unit_of_work.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_id_not_found(mock_user_repo):
+async def test_get_user_by_id_not_found(mock_user_repo, mock_unit_of_work):
     mock_user_repo.get_user_by_id.return_value = None
 
     with pytest.raises(UserNotFoundException):
-        await get_user_by_id(user_repo=mock_user_repo, id=999)
+        await get_user_by_id(uow=mock_unit_of_work, id=999)
 
 
 @pytest.mark.asyncio
 async def test_get_current_user_returns_user_from_access_token(
-    mock_user_repo, mock_token_provider
+    mock_user_repo, mock_unit_of_work, mock_token_provider
 ):
     user_dto = UserDTO(
         id=1,
@@ -143,27 +147,28 @@ async def test_get_current_user_returns_user_from_access_token(
     mock_user_repo.get_user_by_id.return_value = user_dto
 
     result = await get_current_user(
-        mock_user_repo, mock_token_provider, 'access-token'
+        mock_unit_of_work, mock_token_provider, 'access-token'
     )
 
     assert result == user_dto
+    mock_unit_of_work.commit.assert_not_awaited()
     mock_user_repo.get_user_by_id.assert_awaited_once_with(1)
 
 
 @pytest.mark.asyncio
 async def test_get_current_user_rejects_invalid_token(
-    mock_user_repo, mock_token_provider
+    mock_user_repo, mock_unit_of_work, mock_token_provider
 ):
     mock_token_provider.decode_access_token.return_value = {}
 
     with pytest.raises(InvalidTokenException):
         await get_current_user(
-            mock_user_repo, mock_token_provider, 'invalid-token'
+            mock_unit_of_work, mock_token_provider, 'invalid-token'
         )
 
 
 @pytest.mark.asyncio
-async def test_update_user_success(mock_user_repo):
+async def test_update_user_success(mock_user_repo, mock_unit_of_work):
     updated_user = UserDTO(
         id=1,
         username='updateduser',
@@ -176,13 +181,14 @@ async def test_update_user_success(mock_user_repo):
     mock_user_repo.update_user.return_value = updated_user
 
     dto = UpdateUserDTO(username='updateduser', email='updated@example.com')
-    result = await update_user(user_repo=mock_user_repo, id=1, data=dto)
+    result = await update_user(uow=mock_unit_of_work, id=1, data=dto)
 
     assert result == updated_user
+    mock_unit_of_work.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_update_user_email_conflict(mock_user_repo):
+async def test_update_user_email_conflict(mock_user_repo, mock_unit_of_work):
     existing_user = UserDTO(
         id=2,
         username='otheruser',
@@ -196,11 +202,11 @@ async def test_update_user_email_conflict(mock_user_repo):
     dto = UpdateUserDTO(username='newuser', email='existing@example.com')
 
     with pytest.raises(UserAlreadyExistsException):
-        await update_user(user_repo=mock_user_repo, id=1, data=dto)
+        await update_user(uow=mock_unit_of_work, id=1, data=dto)
 
 
 @pytest.mark.asyncio
-async def test_update_user_username_conflict(mock_user_repo):
+async def test_update_user_username_conflict(mock_user_repo, mock_unit_of_work):
     existing_user = UserDTO(
         id=2,
         username='existinguser',
@@ -214,11 +220,13 @@ async def test_update_user_username_conflict(mock_user_repo):
     dto = UpdateUserDTO(username='existinguser', email='newemail@example.com')
 
     with pytest.raises(UserAlreadyExistsException):
-        await update_user(user_repo=mock_user_repo, id=1, data=dto)
+        await update_user(uow=mock_unit_of_work, id=1, data=dto)
 
 
 @pytest.mark.asyncio
-async def test_change_password_success(mock_user_repo, mock_password_hasher):
+async def test_change_password_success(
+    mock_user_repo, mock_unit_of_work, mock_password_hasher
+):
     user_dto = UserDTO(
         id=1,
         username='testuser',
@@ -244,18 +252,19 @@ async def test_change_password_success(mock_user_repo, mock_password_hasher):
         old_password='old_password', new_password='new_password'
     )
     result = await change_password(
-        user_repo=mock_user_repo,
+        uow=mock_unit_of_work,
         password_hasher=mock_password_hasher,
         id=1,
         data=dto,
     )
 
     assert result == updated_user
+    mock_unit_of_work.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_change_password_user_not_found(
-    mock_user_repo, mock_password_hasher
+    mock_user_repo, mock_unit_of_work, mock_password_hasher
 ):
     mock_user_repo.get_user_by_id.return_value = None
 
@@ -265,7 +274,7 @@ async def test_change_password_user_not_found(
 
     with pytest.raises(UserNotFoundException):
         await change_password(
-            user_repo=mock_user_repo,
+            uow=mock_unit_of_work,
             password_hasher=mock_password_hasher,
             id=999,
             data=dto,
@@ -274,7 +283,7 @@ async def test_change_password_user_not_found(
 
 @pytest.mark.asyncio
 async def test_change_password_incorrect_old_password(
-    mock_user_repo, mock_password_hasher
+    mock_user_repo, mock_unit_of_work, mock_password_hasher
 ):
     user_dto = UserDTO(
         id=1,
@@ -293,7 +302,7 @@ async def test_change_password_incorrect_old_password(
 
     with pytest.raises(IncorrectPasswordException):
         await change_password(
-            user_repo=mock_user_repo,
+            uow=mock_unit_of_work,
             password_hasher=mock_password_hasher,
             id=1,
             data=dto,
@@ -301,7 +310,7 @@ async def test_change_password_incorrect_old_password(
 
 
 @pytest.mark.asyncio
-async def test_delete_user_success(mock_user_repo):
+async def test_delete_user_success(mock_user_repo, mock_unit_of_work):
     user_dto = UserDTO(
         id=1,
         username='testuser',
@@ -312,25 +321,26 @@ async def test_delete_user_success(mock_user_repo):
     )
     mock_user_repo.get_user_by_id.return_value = user_dto
 
-    await delete_user(user_repo=mock_user_repo, id=1)
+    await delete_user(uow=mock_unit_of_work, id=1)
 
     mock_user_repo.get_user_by_id.assert_called_once_with(1)
     mock_user_repo.delete_user.assert_called_once_with(1)
+    mock_unit_of_work.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_delete_user_not_found(mock_user_repo):
+async def test_delete_user_not_found(mock_user_repo, mock_unit_of_work):
     mock_user_repo.get_user_by_id.return_value = None
 
     with pytest.raises(UserNotFoundException):
-        await delete_user(user_repo=mock_user_repo, id=999)
+        await delete_user(uow=mock_unit_of_work, id=999)
 
     mock_user_repo.delete_user.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_get_current_user_raises_invalid_token_when_user_not_found(
-    mock_user_repo, mock_token_provider
+    mock_user_repo, mock_unit_of_work, mock_token_provider
 ):
 
     mock_token_provider.decode_access_token.return_value = {'sub': '1'}
@@ -338,7 +348,7 @@ async def test_get_current_user_raises_invalid_token_when_user_not_found(
 
     with pytest.raises(InvalidTokenException):
         await get_current_user(
-            user_repo=mock_user_repo,
+            uow=mock_unit_of_work,
             token_provider=mock_token_provider,
             access_token='valid-token-for-non-existent-user',
         )

@@ -4,7 +4,6 @@ from typing import Protocol
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from identity.database import get_session_factory
 from identity.dtos.token import RefreshTokenDTO
 from identity.entities.token import RefreshToken
 
@@ -36,7 +35,7 @@ class RefreshTokenRepository(IRefreshTokenRepository):
             expires_at=expires_at,
         )
         self._session.add(refresh_token)
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(refresh_token)
         return RefreshTokenDTO(
             id=refresh_token.id,
@@ -66,7 +65,7 @@ class RefreshTokenRepository(IRefreshTokenRepository):
         token = await self._session.get(RefreshToken, id)
         if token is not None:
             token.revoked = True
-            await self._session.commit()
+            await self._session.flush()
 
     async def revoke_refresh_tokens_by_user_id(self, user_id: int) -> None:
         stmt = (
@@ -75,12 +74,4 @@ class RefreshTokenRepository(IRefreshTokenRepository):
             .values(revoked=True)
         )
         await self._session.execute(stmt)
-        await self._session.commit()
-
-
-async def create_refresh_token_repository() -> (
-    IRefreshTokenRepository
-):  # pragma: no cover
-    session_maker = get_session_factory()
-    async with session_maker() as session:
-        return RefreshTokenRepository(session)
+        await self._session.flush()

@@ -115,7 +115,7 @@ async def test_get_chat_messages_returns_repository_page(
     message_repository.get_messages_by_chat.return_value = expected
 
     result = await get_chat_messages(
-        chat_repository, message_repository, project_client, 3, 9, pagination
+        chat_repository, project_client, 3, 9, pagination
     )
 
     assert result is expected
@@ -131,9 +131,7 @@ async def test_get_chat_messages_forwards_chat_and_pagination(
     project_client.has_permission.return_value = True
     pagination = PaginationDTO(limit=7)
 
-    await get_chat_messages(
-        chat_repository, message_repository, project_client, 3, 9, pagination
-    )
+    await get_chat_messages(chat_repository, project_client, 3, 9, pagination)
 
     message_repository.get_messages_by_chat.assert_awaited_once_with(
         3, pagination
@@ -149,7 +147,6 @@ async def test_get_chat_messages_rejects_missing_chat(
     with pytest.raises(ChatNotFoundException):
         await get_chat_messages(
             chat_repository,
-            message_repository,
             project_client,
             3,
             9,
@@ -169,7 +166,6 @@ async def test_get_chat_messages_rejects_missing_permission(
     with pytest.raises(InsufficientProjectPermissionException):
         await get_chat_messages(
             chat_repository,
-            message_repository,
             project_client,
             3,
             9,
@@ -188,7 +184,6 @@ async def test_get_chat_messages_checks_read_permission(
 
     await get_chat_messages(
         chat_repository,
-        message_repository,
         project_client,
         3,
         9,

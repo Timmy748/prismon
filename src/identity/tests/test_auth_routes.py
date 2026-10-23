@@ -15,10 +15,9 @@ from identity.exceptions import (
 @pytest.mark.asyncio
 async def test_post_login_success(
     auth_client: AsyncClient,
-    mock_user_repo,
-    mock_token_repo,
     mock_password_hasher,
     mock_token_provider,
+    mock_unit_of_work,
 ):
     now = datetime.now(timezone.utc)
     mock_user = UserDTO(
@@ -37,13 +36,15 @@ async def test_post_login_success(
         revoked=False,
     )
 
-    mock_user_repo.get_user.return_value = mock_user
+    mock_unit_of_work.user_repository.get_user.return_value = mock_user
     mock_password_hasher.verify.return_value = True
     mock_token_provider.generate_access_token.return_value = 'access-token-123'
     mock_token_provider.generate_refresh_token_hash.return_value = (
         'hashed_refresh_token'
     )
-    mock_token_repo.create_refresh_token.return_value = mock_token_dto
+    mock_unit_of_work.token_repository.create_refresh_token.return_value = (
+        mock_token_dto
+    )
 
     response = await auth_client.post(
         '/login',
@@ -58,6 +59,8 @@ async def test_post_login_success(
     expect_len_cookies = 2
     assert len(set_cookie_headers) == expect_len_cookies
     assert all('httponly' in header.lower() for header in set_cookie_headers)
+    mock_unit_of_work.__aenter__.assert_awaited_once()
+    mock_unit_of_work.__aexit__.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -1,12 +1,15 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 
 from fastapi import APIRouter, Query
 
 from agents.dtos.page import CursorPage
 from agents.dtos.workflow import WorkflowDTO
-from agents.repositories.workflow import IWorkflowRepository
 from agents.schemas.page import PageSchema
 from agents.schemas.workflow import WorkflowSchema
+from agents.unit_of_work import (
+    IAgentsUnitOfWork,
+    create_agents_unit_of_work,
+)
 from agents.use_cases.workflows import get_workflows
 from agents.utils.pagination import encode_cursor, pagination_dto
 
@@ -23,7 +26,7 @@ def _workflow_page_schema(
 
 
 def create_workflow_routes(
-    workflow_repository_factory: Callable[[], Awaitable[IWorkflowRepository]],
+    uow_factory: Callable[[], IAgentsUnitOfWork] = create_agents_unit_of_work,
 ) -> APIRouter:
     router = APIRouter(prefix='/workflows', tags=['workflows'])
 
@@ -32,9 +35,10 @@ def create_workflow_routes(
         cursor: str | None = Query(default=None),
         limit: int = Query(default=50, ge=1, le=100),
     ) -> PageSchema[WorkflowSchema]:
-        page: CursorPage[WorkflowDTO] = await get_workflows(
-            await workflow_repository_factory(), pagination_dto(cursor, limit)
-        )
+        async with uow_factory() as uow:
+            page: CursorPage[WorkflowDTO] = await get_workflows(
+                uow, pagination_dto(cursor, limit)
+            )
         return _workflow_page_schema(page)
 
     return router

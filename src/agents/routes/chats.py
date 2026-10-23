@@ -1,5 +1,6 @@
 # ruff: noqa: PLR0913, PLR0917
-from collections.abc import AsyncIterator, Awaitable, Callable
+import sys
+from collections.abc import AsyncIterator, Callable
 from http import HTTPStatus
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
@@ -18,11 +19,10 @@ from agents.dtos.user import UserDTO
 from agents.entities.message import SenderType
 from agents.exceptions import AgentsException, UserAuthenticationException
 from agents.handlers.errors import handle_agents_error
-from agents.repositories.chat import IChatRepository
-from agents.repositories.message import IMessageRepository
 from agents.schemas.chat import ChatSchema, UpdateChatTitleSchema
 from agents.schemas.message import CreateMessageSchema, MessageSchema
 from agents.schemas.page import PageSchema
+from agents.unit_of_work import IAgentsUnitOfWork
 from agents.use_cases.chats import (
     create_chat,
     delete_chat,
@@ -56,8 +56,7 @@ def _chat_page_schema(page: CursorPage[ChatDTO]) -> PageSchema[ChatSchema]:
 
 
 def create_chat_routes(  # noqa: PLR0915
-    chat_repository_factory: Callable[[], Awaitable[IChatRepository]],
-    message_repository_factory: Callable[[], Awaitable[IMessageRepository]],
+    uow_factory: Callable[[], IAgentsUnitOfWork],
     identity_client_factory: Callable[[], IIdentityClient],
     project_client_factory: Callable[[], IProjectClient],
 ) -> APIRouter:
@@ -80,14 +79,14 @@ def create_chat_routes(  # noqa: PLR0915
     ) -> PageSchema[MessageSchema] | JSONResponse:
         try:
             user = await resolve_current_user(request.cookies)
-            page = await get_chat_messages(
-                await chat_repository_factory(),
-                await message_repository_factory(),
-                project_client_factory(),
-                chat_id,
-                user.id,
-                pagination_dto(cursor, limit),
-            )
+            async with uow_factory() as uow:
+                page = await get_chat_messages(
+                    uow,
+                    project_client_factory(),
+                    chat_id,
+                    user.id,
+                    pagination_dto(cursor, limit),
+                )
             return _message_page_schema(page)
         except AgentsException as error:
             return handle_agents_error(error)
@@ -96,13 +95,15 @@ def create_chat_routes(  # noqa: PLR0915
         '/chats/messages',
         response_model=None,
     )
-    async def post_chat_message(
+    async def post_chat_message(  # noqa: PLR0915
         request: Request,
         data: CreateMessageSchema,
     ) -> StreamingResponse | JSONResponse:
+        uow: IAgentsUnitOfWork | None = None
         try:
             user = await resolve_current_user(request.cookies)
-            chat_repo = await chat_repository_factory()
+            uow = uow_factory()
+            await uow.__aenter__()
             project_client = project_client_factory()
             chat_id = data.chat_id
             chat: ChatDTO | None = None
@@ -114,7 +115,7 @@ def create_chat_routes(  # noqa: PLR0915
                         detail='project_id is required when chat_id is omitted',
                     )
                 chat = await create_chat(
-                    chat_repo,
+                    uow,
                     project_client,
                     CreateChatDTO(
                         project_id=project_id,
@@ -122,7 +123,6 @@ def create_chat_routes(  # noqa: PLR0915
                     ),
                 )
                 chat_id = chat.id
-            message_repo = await message_repository_factory()
             user_message = CreateMessageDTO(
                 parent_id=None,
                 sender_type=SenderType.USER,
@@ -131,8 +131,7 @@ def create_chat_routes(  # noqa: PLR0915
                 meta_data={},
             )
             message = await send_message(
-                chat_repo,
-                message_repo,
+                uow,
                 project_client,
                 chat_id,
                 user.id,
@@ -140,9 +139,10 @@ def create_chat_routes(  # noqa: PLR0915
             )
 
             async def event_stream() -> AsyncIterator[str]:
-                if chat is not None:
-                    yield format_sse('chat', ChatSchema.from_dto(chat))
+                failure: BaseException | None = None
                 try:
+                    if chat is not None:
+                        yield format_sse('chat', ChatSchema.from_dto(chat))
                     async for item in message:
                         event_name = item['event']
                         event_data = item.get('data')
@@ -156,9 +156,21 @@ def create_chat_routes(  # noqa: PLR0915
                             event_data = ChatSchema.from_dto(event_data)
                         yield format_sse(event_name, event_data)
                 except AgentsException as error:
+                    failure = error
                     yield format_sse('error', {'detail': str(error)})
                 except Exception as error:
+                    failure = error
                     yield format_sse('error', {'detail': str(error)})
+                except BaseException as error:
+                    failure = error
+                    raise
+                finally:
+                    if failure is None:
+                        await uow.__aexit__(None, None, None)
+                    else:
+                        await uow.__aexit__(
+                            type(failure), failure, failure.__traceback__
+                        )
 
             return StreamingResponse(
                 event_stream(),
@@ -170,7 +182,13 @@ def create_chat_routes(  # noqa: PLR0915
                 },
             )
         except AgentsException as error:
+            if uow is not None:
+                await uow.__aexit__(*sys.exc_info())
             return handle_agents_error(error)
+        except BaseException:
+            if uow is not None:
+                await uow.__aexit__(*sys.exc_info())
+            raise
 
     @router.patch('/chats/{chat_id}', response_model=ChatSchema)
     async def patch_chat(
@@ -180,13 +198,14 @@ def create_chat_routes(  # noqa: PLR0915
     ) -> ChatSchema | JSONResponse:
         try:
             user = await resolve_current_user(request.cookies)
-            chat = await update_chat_title(
-                await chat_repository_factory(),
-                project_client_factory(),
-                chat_id,
-                user.id,
-                UpdateTitleChatDTO(title=data.title),
-            )
+            async with uow_factory() as uow:
+                chat = await update_chat_title(
+                    uow,
+                    project_client_factory(),
+                    chat_id,
+                    user.id,
+                    UpdateTitleChatDTO(title=data.title),
+                )
             return ChatSchema.from_dto(chat)
         except AgentsException as error:
             return handle_agents_error(error)
@@ -202,12 +221,13 @@ def create_chat_routes(  # noqa: PLR0915
     ) -> Response | JSONResponse:
         try:
             user = await resolve_current_user(request.cookies)
-            await delete_chat(
-                await chat_repository_factory(),
-                project_client_factory(),
-                chat_id,
-                user.id,
-            )
+            async with uow_factory() as uow:
+                await delete_chat(
+                    uow,
+                    project_client_factory(),
+                    chat_id,
+                    user.id,
+                )
             return Response(status_code=HTTPStatus.NO_CONTENT)
         except AgentsException as error:
             return handle_agents_error(error)
@@ -223,13 +243,14 @@ def create_chat_routes(  # noqa: PLR0915
     ) -> PageSchema[ChatSchema] | JSONResponse:
         try:
             user = await resolve_current_user(request.cookies)
-            page = await get_project_chats(
-                await chat_repository_factory(),
-                project_client_factory(),
-                project_id,
-                user.id,
-                pagination_dto(cursor, limit),
-            )
+            async with uow_factory() as uow:
+                page = await get_project_chats(
+                    uow,
+                    project_client_factory(),
+                    project_id,
+                    user.id,
+                    pagination_dto(cursor, limit),
+                )
             return _chat_page_schema(page)
         except AgentsException as error:
             return handle_agents_error(error)

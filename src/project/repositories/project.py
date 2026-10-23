@@ -4,7 +4,6 @@ from typing import Protocol
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from project.database import get_session_factory
 from project.dtos.page import CursorPage, PaginationDTO
 from project.dtos.project import ProjectDTO
 from project.entities.member import Member, MemberStatus
@@ -87,7 +86,7 @@ class ProjectRepository:
     async def create_project(self, name: str, owner_id: int) -> ProjectDTO:
         row = Project(name=name, owner_id=owner_id)
         self._session.add(row)
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)
 
@@ -104,7 +103,7 @@ class ProjectRepository:
             row.name = name
         if owner_id is not None:
             row.owner_id = owner_id
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)
 
@@ -113,10 +112,4 @@ class ProjectRepository:
         if row is None:
             return
         await self._session.delete(row)
-        await self._session.commit()
-
-
-async def create_project_repository() -> IProjectRepository:  # pragma: no cover
-    session_maker = get_session_factory()
-    async with session_maker() as session:
-        return ProjectRepository(session)
+        await self._session.flush()

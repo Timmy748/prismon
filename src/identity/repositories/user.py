@@ -3,7 +3,6 @@ from typing import Protocol
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from identity.database import get_session_factory
 from identity.dtos.user import UserDTO
 from identity.entities.user import User
 from identity.exceptions import UserNotFoundException
@@ -85,7 +84,7 @@ class UserRepository(IUserRepository):
             password_hash=password_hash,
         )
         self._session.add(user)
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(user)
         return UserDTO(
             id=user.id,
@@ -108,7 +107,7 @@ class UserRepository(IUserRepository):
         if email is not None:
             user.email = email
 
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(user)
         return UserDTO(
             id=user.id,
@@ -126,7 +125,7 @@ class UserRepository(IUserRepository):
         if user is None:
             raise UserNotFoundException(id)
         user.password_hash = password_hash
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(user)
         return UserDTO(
             id=user.id,
@@ -141,10 +140,4 @@ class UserRepository(IUserRepository):
         user = await self._session.get(User, id)
         if user is not None:
             await self._session.delete(user)
-            await self._session.commit()
-
-
-async def create_user_repository() -> IUserRepository:  # pragma: no cover
-    session_maker = get_session_factory()
-    async with session_maker() as session:
-        return UserRepository(session)
+            await self._session.flush()

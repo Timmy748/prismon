@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from http import HTTPStatus
 
 from fastapi import APIRouter, Request
@@ -12,7 +12,6 @@ from identity.dtos.user import (
 )
 from identity.exceptions import IdentityException, InvalidTokenException
 from identity.handlers.errors import handle_identity_error
-from identity.repositories.user import IUserRepository
 from identity.schemas.user import (
     CreateUserSchema,
     UpdateUserPasswordSchema,
@@ -21,6 +20,10 @@ from identity.schemas.user import (
 )
 from identity.security.jwt import ITokenProvider
 from identity.security.password_hasher import PasswordHasher
+from identity.unit_of_work import (
+    IIdentityUnitOfWork,
+    create_identity_unit_of_work,
+)
 from identity.use_cases.user import (
     change_password,
     create_user,
@@ -33,38 +36,44 @@ from identity.use_cases.user import (
 def create_user_router(
     password_hasher_factory: Callable[[], PasswordHasher],
     token_provider_factory: Callable[[], ITokenProvider],
-    repository_factory: Callable[[], Awaitable[IUserRepository]],
+    unit_of_work_factory: Callable[[], IIdentityUnitOfWork] = (
+        create_identity_unit_of_work
+    ),
 ) -> APIRouter:
     router = APIRouter(prefix='/users', tags=['users'])
 
-    async def resolve_identity_user(access_token: str) -> UserDTO:
+    async def resolve_identity_user(
+        uow: IIdentityUnitOfWork, access_token: str
+    ) -> UserDTO:
         return await get_current_user(
-            await repository_factory(),
+            uow,
             token_provider_factory(),
             access_token,
         )
 
-    async def resolve_current_user(cookies) -> UserDTO:
+    async def resolve_current_user(
+        uow: IIdentityUnitOfWork, cookies
+    ) -> UserDTO:
         access_token = cookies.get('jwt')
         if not access_token:
             raise InvalidTokenException()
-        return await resolve_identity_user(access_token)
+        return await resolve_identity_user(uow, access_token)
 
     @router.post('', response_model=UserSchema, status_code=HTTPStatus.CREATED)
     async def post_user(
         data: CreateUserSchema,
     ) -> UserDTO | JSONResponse:
         try:
-            repo = await repository_factory()
-            return await create_user(
-                repo,
-                password_hasher_factory(),
-                CreateUserDTO(
-                    username=data.username,
-                    email=data.email,
-                    password_hash=data.password_hash,
-                ),
-            )
+            async with unit_of_work_factory() as uow:
+                return await create_user(
+                    uow,
+                    password_hasher_factory(),
+                    CreateUserDTO(
+                        username=data.username,
+                        email=data.email,
+                        password_hash=data.password_hash,
+                    ),
+                )
         except IdentityException as error:
             return handle_identity_error(error)
 
@@ -73,8 +82,8 @@ def create_user_router(
         user_id: int,
     ) -> UserDTO | JSONResponse:
         try:
-            repo = await repository_factory()
-            return await get_user_by_id(repo, user_id)
+            async with unit_of_work_factory() as uow:
+                return await get_user_by_id(uow, user_id)
         except IdentityException as error:
             return handle_identity_error(error)
 
@@ -84,13 +93,13 @@ def create_user_router(
         data: UpdateUserSchema,
     ) -> UserDTO | JSONResponse:
         try:
-            user = await resolve_current_user(request.cookies)
-            repo = await repository_factory()
-            return await update_user(
-                repo,
-                user.id,
-                UpdateUserDTO(username=data.username, email=data.email),
-            )
+            async with unit_of_work_factory() as uow:
+                user = await resolve_current_user(uow, request.cookies)
+                return await update_user(
+                    uow,
+                    user.id,
+                    UpdateUserDTO(username=data.username, email=data.email),
+                )
         except IdentityException as error:
             return handle_identity_error(error)
 
@@ -100,17 +109,17 @@ def create_user_router(
         data: UpdateUserPasswordSchema,
     ) -> UserDTO | JSONResponse:
         try:
-            user = await resolve_current_user(request.cookies)
-            repo = await repository_factory()
-            return await change_password(
-                repo,
-                password_hasher_factory(),
-                user.id,
-                UpdateUserPasswordDTO(
-                    old_password=data.old_password,
-                    new_password=data.new_password,
-                ),
-            )
+            async with unit_of_work_factory() as uow:
+                user = await resolve_current_user(uow, request.cookies)
+                return await change_password(
+                    uow,
+                    password_hasher_factory(),
+                    user.id,
+                    UpdateUserPasswordDTO(
+                        old_password=data.old_password,
+                        new_password=data.new_password,
+                    ),
+                )
         except IdentityException as error:
             return handle_identity_error(error)
 
