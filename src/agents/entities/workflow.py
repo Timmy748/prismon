@@ -13,7 +13,7 @@ class Workflow:
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     name: Mapped[str] = mapped_column(String(256), unique=True)
     description: Mapped[str] = mapped_column(Text)
-    picture: Mapped[str] = mapped_column(String(256))
+    version: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), insert_default=func.now(), init=False
     )

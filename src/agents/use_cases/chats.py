@@ -1,4 +1,8 @@
 # ruff: noqa: PLR0913, PLR0917
+from collections.abc import AsyncIterator
+from dataclasses import asdict
+from typing import Any
+
 from agents.clients.project import IProjectClient
 from agents.dtos.chat import (
     MAX_CHAT_TITLE_LENGTH,
@@ -17,8 +21,11 @@ from agents.exceptions import (
     InvalidChatTitleException,
     MultipleSubmitError,
 )
+from agents.llm_engine.base import GenerationChunk, GenerationFinal
+from agents.llm_engine.ollama import OllamaEngine
 from agents.repositories.chat import IChatRepository
 from agents.repositories.message import IMessageRepository
+from agents.workflows.registry import workflow_registry_factory
 from project.permissions import ProjectPermission
 
 
@@ -86,16 +93,17 @@ async def get_chat_messages(
     return await message_repo.get_messages_by_chat(chat_id, pagination)
 
 
-async def send_human_message(
+async def send_message(
     chat_repo: IChatRepository,
     message_repo: IMessageRepository,
     project_client: IProjectClient,
     chat_id: int,
     user_id: int,
     message: CreateMessageDTO,
-) -> MessageDTO:
+) -> AsyncIterator[dict[str, Any]]:
     if not message.text.strip():
         raise EmptyMessageException()
+
     chat = await _get_owned_chat(chat_repo, chat_id, user_id)
     await _require_project_permission(
         project_client,
@@ -103,31 +111,56 @@ async def send_human_message(
         user_id,
         ProjectPermission.CHAT_SEND_MESSAGE,
     )
-    history = await message_repo.get_messages_by_chat(
-        chat_id=chat_id, pagination=PaginationDTO(limit=1)
+    latest = await message_repo.get_messages_by_chat(
+        chat_id=chat_id,
+        pagination=PaginationDTO(limit=1),
     )
-    if history.items and history.items[0].sender_type == SenderType.USER:
+    if latest.items and latest.items[0].sender_type == SenderType.USER:
         raise MultipleSubmitError()
 
-    return await message_repo.create_human_message(chat_id, message.text)
-
-
-async def send_ai_message(
-    chat_repo: IChatRepository,
-    message_repo: IMessageRepository,
-    chat_id: int,
-    message: CreateMessageDTO,
-) -> MessageDTO:
-    if not message.text.strip():
-        raise EmptyMessageException()
-    await _get_chat(chat_repo, chat_id)
-    return await message_repo.create_ai_message(
-        chat_id=chat_id,
-        parent_id=message.parent_id,
-        text=message.text,
-        payload=message.payload,
-        meta_data=message.meta_data,
+    workflow = workflow_registry_factory().get_workflow(
+        'chat', engine=OllamaEngine()
     )
+    await message_repo.create_human_message(chat_id, message.text)
+    history = await message_repo.get_messages_by_chat(
+        chat_id, PaginationDTO(limit=100)
+    )
+    stream = workflow.stream(
+        str(chat_id), {'messages': list(reversed(history.items))}
+    )
+
+    async def stream_response() -> AsyncIterator[dict[str, Any]]:
+        final: GenerationFinal | None = None
+        try:
+            async for event in stream:
+                if isinstance(event, GenerationChunk):
+                    if event.text_delta:
+                        yield {'event': 'token', 'data': event.text_delta}
+                elif isinstance(event, GenerationFinal):
+                    final = event
+
+            if final is None:
+                raise RuntimeError('O workflow terminou sem evento final.')
+            if not final.raw_text.strip():
+                raise EmptyMessageException()
+
+            await _get_chat(chat_repo, chat_id)
+            saved_message = await message_repo.create_ai_message(
+                chat_id=chat_id,
+                parent_id=None,
+                text=final.raw_text,
+                payload={},
+                meta_data={
+                    'workflow': workflow.name,
+                    'version': workflow.version,
+                    'generation': asdict(final.usage),
+                },
+            )
+            yield {'event': 'done', 'data': saved_message}
+        except Exception as error:
+            yield {'event': 'error', 'data': {'message': str(error)}}
+
+    return stream_response()
 
 
 async def update_chat_title(

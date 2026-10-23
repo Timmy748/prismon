@@ -7,6 +7,6 @@ class WorkflowDTO:
     id: int
     name: str
     description: str
-    picture: str
+    version: str
     created_at: datetime
     updated_at: datetime

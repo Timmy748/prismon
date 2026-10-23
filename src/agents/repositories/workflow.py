@@ -24,7 +24,7 @@ class WorkflowRepository(IWorkflowRepository):
             id=row.id,
             name=row.name,
             description=row.description,
-            picture=row.picture,
+            version=row.version,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )

@@ -11,7 +11,7 @@ class WorkflowSchema(BaseModel):
     id: int
     name: str
     description: str
-    picture: str
+    version: str
     created_at: datetime
     updated_at: datetime
 
@@ -21,7 +21,7 @@ class WorkflowSchema(BaseModel):
             id=workflow.id,
             name=workflow.name,
             description=workflow.description,
-            picture=workflow.picture,
+            version=workflow.version,
             created_at=workflow.created_at,
             updated_at=workflow.updated_at,
         )

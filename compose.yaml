@@ -14,6 +14,9 @@ services:
         JWT_SECRET_KEY: ${JWT_SECRET_KEY}
         JWT_ALGORITHM: ${JWT_ALGORITHM}
         JWT_EXPIRES_IN_MINUTES: ${JWT_EXPIRES_IN_MINUTES}
+        OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+        OLLAMA_MODEL: ${OLLAMA_MODEL}
+        OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE}
 
   postgres_db:
     image: postgres
@@ -31,7 +34,26 @@ services:
       timeout: 3s
       retries: 5
 
+  ollama:
+    image: ollama/ollama:latest
+    profiles:
+      - dev
+    restart: unless-stopped
+    ports:
+      - 11434:11434
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
 volumes:
   pg_data:
-
+    name: pg_data
+  ollama_data:
+    name: ollama_data
 

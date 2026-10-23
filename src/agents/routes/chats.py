@@ -1,9 +1,9 @@
 # ruff: noqa: PLR0913, PLR0917
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from http import HTTPStatus
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from agents.clients.identity import IIdentityClient
 from agents.clients.project import IProjectClient
@@ -28,10 +28,11 @@ from agents.use_cases.chats import (
     delete_chat,
     get_chat_messages,
     get_project_chats,
-    send_human_message,
+    send_message,
     update_chat_title,
 )
 from agents.utils.pagination import encode_cursor, pagination_dto
+from agents.utils.sse import format_sse
 
 
 def _message_page_schema(
@@ -54,7 +55,7 @@ def _chat_page_schema(page: CursorPage[ChatDTO]) -> PageSchema[ChatSchema]:
     )
 
 
-def create_chat_routes(
+def create_chat_routes(  # noqa: PLR0915
     chat_repository_factory: Callable[[], Awaitable[IChatRepository]],
     message_repository_factory: Callable[[], Awaitable[IMessageRepository]],
     identity_client_factory: Callable[[], IIdentityClient],
@@ -93,18 +94,18 @@ def create_chat_routes(
 
     @router.post(
         '/chats/messages',
-        response_model=MessageSchema,
-        status_code=HTTPStatus.CREATED,
+        response_model=None,
     )
     async def post_chat_message(
         request: Request,
         data: CreateMessageSchema,
-    ) -> MessageSchema | JSONResponse:
+    ) -> StreamingResponse | JSONResponse:
         try:
             user = await resolve_current_user(request.cookies)
             chat_repo = await chat_repository_factory()
             project_client = project_client_factory()
             chat_id = data.chat_id
+            chat: ChatDTO | None = None
             if chat_id is None:
                 project_id = data.project_id
                 if project_id is None:
@@ -121,21 +122,53 @@ def create_chat_routes(
                     ),
                 )
                 chat_id = chat.id
-            message = await send_human_message(
+            message_repo = await message_repository_factory()
+            user_message = CreateMessageDTO(
+                parent_id=None,
+                sender_type=SenderType.USER,
+                text=data.text,
+                payload={},
+                meta_data={},
+            )
+            message = await send_message(
                 chat_repo,
-                await message_repository_factory(),
+                message_repo,
                 project_client,
                 chat_id,
                 user.id,
-                CreateMessageDTO(
-                    parent_id=None,
-                    sender_type=SenderType.USER,
-                    text=data.text,
-                    payload={},
-                    meta_data={},
-                ),
+                user_message,
             )
-            return MessageSchema.from_dto(message)
+
+            async def event_stream() -> AsyncIterator[str]:
+                if chat is not None:
+                    yield format_sse('chat', ChatSchema.from_dto(chat))
+                try:
+                    async for item in message:
+                        event_name = item['event']
+                        event_data = item.get('data')
+                        if event_name == 'done' and isinstance(
+                            event_data, MessageDTO
+                        ):
+                            event_data = MessageSchema.from_dto(event_data)
+                        elif event_name == 'chat' and isinstance(
+                            event_data, ChatDTO
+                        ):
+                            event_data = ChatSchema.from_dto(event_data)
+                        yield format_sse(event_name, event_data)
+                except AgentsException as error:
+                    yield format_sse('error', {'detail': str(error)})
+                except Exception as error:
+                    yield format_sse('error', {'detail': str(error)})
+
+            return StreamingResponse(
+                event_stream(),
+                media_type='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'X-Accel-Buffering': 'no',
+                },
+            )
         except AgentsException as error:
             return handle_agents_error(error)
 
