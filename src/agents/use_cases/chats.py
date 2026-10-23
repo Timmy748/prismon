@@ -23,8 +23,7 @@ from agents.exceptions import (
 )
 from agents.llm_engine.base import GenerationChunk, GenerationFinal
 from agents.llm_engine.ollama import OllamaEngine
-from agents.repositories.chat import IChatRepository
-from agents.repositories.message import IMessageRepository
+from agents.unit_of_work import IAgentsUnitOfWork
 from agents.workflows.registry import workflow_registry_factory
 from project.permissions import ProjectPermission
 
@@ -39,24 +38,24 @@ async def _require_project_permission(
         raise InsufficientProjectPermissionException(permission.value)
 
 
-async def _get_chat(chat_repo: IChatRepository, chat_id: int) -> ChatDTO:
-    chat = await chat_repo.get_chat(chat_id)
+async def _get_chat(uow: IAgentsUnitOfWork, chat_id: int) -> ChatDTO:
+    chat = await uow.chat_repository.get_chat(chat_id)
     if chat is None:
         raise ChatNotFoundException(chat_id)
     return chat
 
 
 async def _get_owned_chat(
-    chat_repo: IChatRepository, chat_id: int, user_id: int
+    uow: IAgentsUnitOfWork, chat_id: int, user_id: int
 ) -> ChatDTO:
-    chat = await _get_chat(chat_repo, chat_id)
+    chat = await _get_chat(uow, chat_id)
     if chat.owner != user_id:
         raise ChatOwnerException(chat_id)
     return chat
 
 
 async def create_chat(
-    chat_repo: IChatRepository,
+    uow: IAgentsUnitOfWork,
     project_client: IProjectClient,
     data: CreateChatDTO,
 ) -> ChatDTO:
@@ -68,34 +67,36 @@ async def create_chat(
         data.owner,
         ProjectPermission.CHAT_CREATE,
     )
-    return await chat_repo.create_chat(
+    chat = await uow.chat_repository.create_chat(
         title=data.title,
         project_id=data.project_id,
         owner=data.owner,
     )
+    await uow.commit()
+    return chat
 
 
 async def get_chat_messages(
-    chat_repo: IChatRepository,
-    message_repo: IMessageRepository,
+    uow: IAgentsUnitOfWork,
     project_client: IProjectClient,
     chat_id: int,
     user_id: int,
     pagination: PaginationDTO,
 ) -> CursorPage[MessageDTO]:
-    chat = await _get_chat(chat_repo, chat_id)
+    chat = await _get_chat(uow, chat_id)
     await _require_project_permission(
         project_client,
         chat.project_id,
         user_id,
         ProjectPermission.CHAT_READ,
     )
-    return await message_repo.get_messages_by_chat(chat_id, pagination)
+    return await uow.message_repository.get_messages_by_chat(
+        chat_id, pagination
+    )
 
 
 async def send_message(
-    chat_repo: IChatRepository,
-    message_repo: IMessageRepository,
+    uow: IAgentsUnitOfWork,
     project_client: IProjectClient,
     chat_id: int,
     user_id: int,
@@ -104,14 +105,14 @@ async def send_message(
     if not message.text.strip():
         raise EmptyMessageException()
 
-    chat = await _get_owned_chat(chat_repo, chat_id, user_id)
+    chat = await _get_owned_chat(uow, chat_id, user_id)
     await _require_project_permission(
         project_client,
         chat.project_id,
         user_id,
         ProjectPermission.CHAT_SEND_MESSAGE,
     )
-    latest = await message_repo.get_messages_by_chat(
+    latest = await uow.message_repository.get_messages_by_chat(
         chat_id=chat_id,
         pagination=PaginationDTO(limit=1),
     )
@@ -121,8 +122,8 @@ async def send_message(
     workflow = workflow_registry_factory().get_workflow(
         'chat', engine=OllamaEngine()
     )
-    await message_repo.create_human_message(chat_id, message.text)
-    history = await message_repo.get_messages_by_chat(
+    await uow.message_repository.create_human_message(chat_id, message.text)
+    history = await uow.message_repository.get_messages_by_chat(
         chat_id, PaginationDTO(limit=100)
     )
     stream = workflow.stream(
@@ -144,8 +145,8 @@ async def send_message(
             if not final.raw_text.strip():
                 raise EmptyMessageException()
 
-            await _get_chat(chat_repo, chat_id)
-            saved_message = await message_repo.create_ai_message(
+            await _get_chat(uow, chat_id)
+            saved_message = await uow.message_repository.create_ai_message(
                 chat_id=chat_id,
                 parent_id=None,
                 text=final.raw_text,
@@ -156,15 +157,17 @@ async def send_message(
                     'generation': asdict(final.usage),
                 },
             )
+            await uow.commit()
             yield {'event': 'done', 'data': saved_message}
         except Exception as error:
+            await uow.rollback()
             yield {'event': 'error', 'data': {'message': str(error)}}
 
     return stream_response()
 
 
 async def update_chat_title(
-    chat_repo: IChatRepository,
+    uow: IAgentsUnitOfWork,
     project_client: IProjectClient,
     chat_id: int,
     user_id: int,
@@ -172,34 +175,39 @@ async def update_chat_title(
 ) -> ChatDTO:
     if not data.title.strip() or len(data.title) > MAX_CHAT_TITLE_LENGTH:
         raise InvalidChatTitleException()
-    chat = await _get_owned_chat(chat_repo, chat_id, user_id)
+    chat = await _get_owned_chat(uow, chat_id, user_id)
     await _require_project_permission(
         project_client,
         chat.project_id,
         user_id,
         ProjectPermission.CHAT_UPDATE,
     )
-    return await chat_repo.update_chat_title(chat_id, data.title)
+    updated_chat = await uow.chat_repository.update_chat_title(
+        chat_id, data.title
+    )
+    await uow.commit()
+    return updated_chat
 
 
 async def delete_chat(
-    chat_repo: IChatRepository,
+    uow: IAgentsUnitOfWork,
     project_client: IProjectClient,
     chat_id: int,
     user_id: int,
 ) -> None:
-    chat = await _get_owned_chat(chat_repo, chat_id, user_id)
+    chat = await _get_owned_chat(uow, chat_id, user_id)
     await _require_project_permission(
         project_client,
         chat.project_id,
         user_id,
         ProjectPermission.CHAT_DELETE,
     )
-    await chat_repo.delete_chat(chat_id)
+    await uow.chat_repository.delete_chat(chat_id)
+    await uow.commit()
 
 
 async def get_project_chats(
-    chat_repo: IChatRepository,
+    uow: IAgentsUnitOfWork,
     project_client: IProjectClient,
     project_id: int,
     user_id: int,
@@ -211,7 +219,7 @@ async def get_project_chats(
         user_id,
         ProjectPermission.CHAT_READ,
     )
-    return await chat_repo.get_chats_by_project(
+    return await uow.chat_repository.get_chats_by_project(
         project_id=project_id,
         title=None,
         owner_id=None,

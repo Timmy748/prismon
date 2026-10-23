@@ -19,6 +19,7 @@ from project.exceptions import (
     InvalidAssetStateException,
     ProjectNotFoundException,
 )
+from project.tests.fixtures.mock import make_unit_of_work
 from project.use_cases.assets import (
     add_asset,
     delete_asset,
@@ -73,10 +74,9 @@ async def test_get_assets_checks_read_permission_and_forwards_filters(
     asset_dependencies,
 ):
     project_repo, member_repo, asset_repo, storage, _ = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     page = await get_assets(
-        project_repo,
-        member_repo,
-        asset_repo,
+        uow,
         storage,
         8,
         12,
@@ -94,23 +94,26 @@ async def test_get_assets_checks_read_permission_and_forwards_filters(
 @pytest.mark.asyncio
 async def test_asset_access_rejects_missing_project(asset_dependencies):
     project_repo, member_repo, asset_repo, storage, _ = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     project_repo.get_project.return_value = None
     with pytest.raises(ProjectNotFoundException):
-        await get_assets(project_repo, member_repo, asset_repo, storage, 8, 12)
+        await get_assets(uow, storage, 8, 12)
     member_repo.get_members.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_asset_access_rejects_non_member(asset_dependencies):
     project_repo, member_repo, asset_repo, storage, _ = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     member_repo.get_members.return_value = CursorPage([], PaginationDTO())
     with pytest.raises(ProjectNotFoundException):
-        await get_assets(project_repo, member_repo, asset_repo, storage, 8, 12)
+        await get_assets(uow, storage, 8, 12)
 
 
 @pytest.mark.asyncio
 async def test_asset_access_rejects_missing_permission(asset_dependencies):
     project_repo, member_repo, asset_repo, storage, _ = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     member_repo.get_members.return_value.items[0] = MemberDTO(
         1,
         8,
@@ -122,9 +125,7 @@ async def test_asset_access_rejects_missing_permission(asset_dependencies):
     )
     with pytest.raises(InsufficientProjectPermissionException):
         await add_asset(
-            project_repo,
-            member_repo,
-            asset_repo,
+            uow,
             storage,
             8,
             12,
@@ -137,10 +138,9 @@ async def test_asset_access_rejects_missing_permission(asset_dependencies):
 @pytest.mark.asyncio
 async def test_add_asset_owner_is_active_and_stores_content(asset_dependencies):
     project_repo, member_repo, asset_repo, storage, asset = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     result = await add_asset(
-        project_repo,
-        member_repo,
-        asset_repo,
+        uow,
         storage,
         8,
         12,
@@ -165,6 +165,7 @@ async def test_add_asset_regular_member_is_pending_and_empty_description_none(
     asset_dependencies,
 ):
     project_repo, member_repo, asset_repo, storage, _ = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     member_repo.get_members.return_value.items[0] = MemberDTO(
         1,
         8,
@@ -175,9 +176,7 @@ async def test_add_asset_regular_member_is_pending_and_empty_description_none(
         datetime.now(timezone.utc),
     )
     await add_asset(
-        project_repo,
-        member_repo,
-        asset_repo,
+        uow,
         storage,
         8,
         12,
@@ -194,12 +193,11 @@ async def test_add_asset_regular_member_is_pending_and_empty_description_none(
 @pytest.mark.asyncio
 async def test_add_asset_cleans_storage_if_repository_fails(asset_dependencies):
     project_repo, member_repo, asset_repo, storage, _ = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     asset_repo.create_asset.side_effect = RuntimeError
     with pytest.raises(RuntimeError):
         await add_asset(
-            project_repo,
-            member_repo,
-            asset_repo,
+            uow,
             storage,
             8,
             12,
@@ -214,10 +212,9 @@ async def test_update_asset_replaces_storage_and_updates_metadata(
     asset_dependencies,
 ):
     project_repo, member_repo, asset_repo, storage, asset = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     result = await update_asset(
-        project_repo,
-        member_repo,
-        asset_repo,
+        uow,
         storage,
         8,
         12,
@@ -239,10 +236,9 @@ async def test_update_asset_without_content_leaves_storage_unchanged(
     asset_dependencies,
 ):
     project_repo, member_repo, asset_repo, storage, _ = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     await update_asset(
-        project_repo,
-        member_repo,
-        asset_repo,
+        uow,
         storage,
         8,
         12,
@@ -264,6 +260,7 @@ async def test_update_asset_rejects_missing_or_foreign_asset(
     asset_dependencies, missing_or_wrong_project
 ):
     project_repo, member_repo, asset_repo, storage, asset = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     asset_repo.get_asset.return_value = (
         None
         if missing_or_wrong_project == 'missing'
@@ -280,9 +277,7 @@ async def test_update_asset_rejects_missing_or_foreign_asset(
     )
     with pytest.raises(AssetNotFoundException):
         await update_asset(
-            project_repo,
-            member_repo,
-            asset_repo,
+            uow,
             storage,
             8,
             12,
@@ -296,12 +291,11 @@ async def test_update_asset_cleans_new_file_when_repository_returns_none(
     asset_dependencies,
 ):
     project_repo, member_repo, asset_repo, storage, _ = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     asset_repo.update_asset.return_value = None
     with pytest.raises(AssetNotFoundException):
         await update_asset(
-            project_repo,
-            member_repo,
-            asset_repo,
+            uow,
             storage,
             8,
             12,
@@ -315,7 +309,8 @@ async def test_update_asset_cleans_new_file_when_repository_returns_none(
 @pytest.mark.asyncio
 async def test_delete_asset_deletes_record_and_file(asset_dependencies):
     project_repo, member_repo, asset_repo, storage, asset = asset_dependencies
-    await delete_asset(project_repo, member_repo, asset_repo, storage, 8, 12, 3)
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
+    await delete_asset(uow, storage, 8, 12, 3)
     asset_repo.delete_asset.assert_awaited_once_with(3)
     storage.delete.assert_called_once_with(asset.file)
 
@@ -328,6 +323,7 @@ async def test_delete_asset_rejects_missing_or_foreign_asset(
     asset_dependencies, missing_or_wrong_project
 ):
     project_repo, member_repo, asset_repo, storage, asset = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     asset_repo.get_asset.return_value = (
         None
         if missing_or_wrong_project == 'missing'
@@ -343,9 +339,7 @@ async def test_delete_asset_rejects_missing_or_foreign_asset(
         )
     )
     with pytest.raises(AssetNotFoundException):
-        await delete_asset(
-            project_repo, member_repo, asset_repo, storage, 8, 12, 3
-        )
+        await delete_asset(uow, storage, 8, 12, 3)
     asset_repo.delete_asset.assert_not_awaited()
     storage.delete.assert_not_called()
 
@@ -362,15 +356,15 @@ async def test_review_asset_changes_pending_status(
     asset_dependencies, accept, expected
 ):
     project_repo, member_repo, asset_repo, _, _ = asset_dependencies
-    await review_asset(
-        project_repo, member_repo, asset_repo, 8, 12, 3, ApproveAssetDTO(accept)
-    )
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
+    await review_asset(uow, 8, 12, 3, ApproveAssetDTO(accept))
     asset_repo.update_asset.assert_awaited_once_with(3, status=expected)
 
 
 @pytest.mark.asyncio
 async def test_review_asset_rejects_non_pending_state(asset_dependencies):
     project_repo, member_repo, asset_repo, _, asset = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     asset_repo.get_asset.return_value = AssetDTO(
         asset.id,
         asset.project_id,
@@ -383,9 +377,7 @@ async def test_review_asset_rejects_non_pending_state(asset_dependencies):
     )
     with pytest.raises(InvalidAssetStateException):
         await review_asset(
-            project_repo,
-            member_repo,
-            asset_repo,
+            uow,
             8,
             12,
             3,
@@ -402,6 +394,7 @@ async def test_review_asset_rejects_missing_or_foreign_asset(
     asset_dependencies, missing_or_wrong_project
 ):
     project_repo, member_repo, asset_repo, _, asset = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     asset_repo.get_asset.return_value = (
         None
         if missing_or_wrong_project == 'missing'
@@ -418,9 +411,7 @@ async def test_review_asset_rejects_missing_or_foreign_asset(
     )
     with pytest.raises(AssetNotFoundException):
         await review_asset(
-            project_repo,
-            member_repo,
-            asset_repo,
+            uow,
             8,
             12,
             3,
@@ -434,12 +425,11 @@ async def test_review_asset_raises_not_found_if_update_disappears(
     asset_dependencies,
 ):
     project_repo, member_repo, asset_repo, _, _ = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     asset_repo.update_asset.return_value = None
     with pytest.raises(AssetNotFoundException):
         await review_asset(
-            project_repo,
-            member_repo,
-            asset_repo,
+            uow,
             8,
             12,
             3,

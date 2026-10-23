@@ -7,20 +7,18 @@ from identity.exceptions import (
     InvalidTokenException,
     TokenExpiredException,
 )
-from identity.repositories.token import IRefreshTokenRepository
-from identity.repositories.user import IUserRepository
 from identity.security.jwt import ITokenProvider
 from identity.security.password_hasher import PasswordHasher
+from identity.unit_of_work import IIdentityUnitOfWork
 
 
 async def login(
-    user_repo: IUserRepository,
-    token_repo: IRefreshTokenRepository,
+    uow: IIdentityUnitOfWork,
     password_hasher: PasswordHasher,
     token_provider: ITokenProvider,
     data: LoginDTO,
 ) -> AuthenticationDTO:
-    user = await user_repo.get_user(email=data.email)
+    user = await uow.user_repository.get_user(email=data.email)
     if not user:
         raise InvalidCredentialsException()
 
@@ -32,11 +30,12 @@ async def login(
     token_hash = token_provider.generate_refresh_token_hash(raw_refresh_token)
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
 
-    await token_repo.create_refresh_token(
+    await uow.token_repository.create_refresh_token(
         user_id=user.id,
         token_hash=token_hash,
         expires_at=expires_at,
     )
+    await uow.commit()
 
     return AuthenticationDTO(
         access_token=access_token,
@@ -45,12 +44,14 @@ async def login(
 
 
 async def refresh_token(
-    token_repo: IRefreshTokenRepository,
+    uow: IIdentityUnitOfWork,
     token_provider: ITokenProvider,
     token: str,
 ) -> AuthenticationDTO:
     token_hash = token_provider.generate_refresh_token_hash(token)
-    token_dto = await token_repo.get_refresh_token_by_token(token_hash)
+    token_dto = await uow.token_repository.get_refresh_token_by_token(
+        token_hash
+    )
 
     if not token_dto or token_dto.revoked:
         raise InvalidTokenException()
@@ -58,7 +59,7 @@ async def refresh_token(
     if token_dto.expires_at < datetime.now(timezone.utc):
         raise TokenExpiredException()
 
-    await token_repo.revoke_refresh_token(token_dto.id)
+    await uow.token_repository.revoke_refresh_token(token_dto.id)
 
     access_token = token_provider.generate_access_token(
         {'sub': str(token_dto.user_id)}
@@ -69,11 +70,12 @@ async def refresh_token(
     )
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
 
-    await token_repo.create_refresh_token(
+    await uow.token_repository.create_refresh_token(
         user_id=token_dto.user_id,
         token_hash=new_token_hash,
         expires_at=expires_at,
     )
+    await uow.commit()
 
     return AuthenticationDTO(
         access_token=access_token,
@@ -82,7 +84,8 @@ async def refresh_token(
 
 
 async def logout(
-    token_repo: IRefreshTokenRepository,
+    uow: IIdentityUnitOfWork,
     user_id: int,
 ) -> None:
-    await token_repo.revoke_refresh_tokens_by_user_id(user_id)
+    await uow.token_repository.revoke_refresh_tokens_by_user_id(user_id)
+    await uow.commit()

@@ -1,4 +1,5 @@
 # ruff: noqa: PLR0913, PLR0917
+import asyncio
 import json
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -13,7 +14,7 @@ from agents.dtos.message import MessageDTO
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.dtos.user import UserDTO
 from agents.entities.message import SenderType
-from agents.exceptions import ChatNotFoundException
+from agents.exceptions import ChatNotFoundException, UserAuthenticationException
 from agents.routes.chats import create_chat_routes
 from agents.schemas.chat import UpdateChatTitleSchema
 from agents.schemas.message import CreateMessageSchema
@@ -132,8 +133,7 @@ async def test_list_chat_messages_returns_page_and_forwards_pagination(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -161,8 +161,7 @@ async def test_list_chat_messages_rejects_missing_authentication(
     project_client,
 ):
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -187,8 +186,7 @@ async def test_list_chat_messages_maps_chat_not_found(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -208,8 +206,7 @@ async def test_list_chat_messages_rejects_invalid_cursor(
     project_client,
 ):
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -246,8 +243,7 @@ async def test_post_message_to_existing_chat_streams_tokens_and_saved_message(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -301,8 +297,7 @@ async def test_post_message_without_chat_streams_created_chat_event(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -339,8 +334,7 @@ async def test_post_message_streams_generation_error_as_sse(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -376,8 +370,7 @@ async def test_post_message_stream_converts_chat_dto_event(
 
     monkeypatch.setattr(chat_routes, 'send_message', message_events)
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -434,8 +427,7 @@ async def test_post_message_stream_converts_iteration_exception_to_sse(
 
     monkeypatch.setattr(chat_routes, 'send_message', message_events)
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -464,8 +456,7 @@ async def test_list_chat_messages_endpoint_returns_page_directly(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -492,8 +483,7 @@ async def test_patch_chat_endpoint_returns_updated_chat_directly(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(None),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -517,8 +507,7 @@ async def test_delete_chat_endpoint_returns_no_content_directly(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(None),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -542,8 +531,7 @@ async def test_list_project_chats_endpoint_returns_page_directly(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(None),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -561,8 +549,7 @@ async def test_list_chat_messages_endpoint_maps_missing_auth_directly(
     chat_repository, message_repository, identity_client, project_client
 ):
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -613,8 +600,7 @@ async def test_chat_routes_map_use_case_errors_directly(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -648,8 +634,7 @@ async def test_post_message_endpoint_maps_setup_error_directly(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -663,6 +648,75 @@ async def test_post_message_endpoint_maps_setup_error_directly(
 
 
 @pytest.mark.asyncio
+async def test_post_message_maps_auth_error_before_opening_uow(
+    chat_repository, identity_client, project_client
+):
+    identity_client.get_current_user.side_effect = UserAuthenticationException()
+    router = create_chat_routes(
+        lambda: chat_repository,
+        lambda: identity_client,
+        lambda: project_client,
+    )
+
+    response = await _endpoint(router, '/chats/messages', 'POST')(
+        _request({'jwt': 'token'}),
+        CreateMessageSchema(chat_id=CHAT_ID, text='x'),
+    )
+
+    assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_post_message_reraises_cancellation_before_opening_uow(
+    chat_repository, identity_client, project_client
+):
+    identity_client.get_current_user.side_effect = asyncio.CancelledError()
+    router = create_chat_routes(
+        lambda: chat_repository,
+        lambda: identity_client,
+        lambda: project_client,
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await _endpoint(router, '/chats/messages', 'POST')(
+            _request({'jwt': 'token'}),
+            CreateMessageSchema(chat_id=CHAT_ID, text='x'),
+        )
+
+
+@pytest.mark.asyncio
+async def test_post_message_stream_reraises_cancellation_and_closes_uow(
+    chat_repository, identity_client, project_client, monkeypatch
+):
+    async def cancelled_stream(*args, **kwargs):
+        async def events():
+            yield {'event': 'token', 'data': 'partial'}
+            raise asyncio.CancelledError()
+
+        return events()
+
+    monkeypatch.setattr(chat_routes, 'send_message', cancelled_stream)
+    identity_client.get_current_user.return_value = UserDTO(
+        11, 'ana', 'a@example.com'
+    )
+    router = create_chat_routes(
+        lambda: chat_repository,
+        lambda: identity_client,
+        lambda: project_client,
+    )
+    endpoint = _endpoint(router, '/chats/messages', 'POST')
+    response = await endpoint(
+        _request({'jwt': 'token'}),
+        CreateMessageSchema(chat_id=CHAT_ID, text='x'),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        _ = ''.join([chunk async for chunk in response.body_iterator])
+
+    assert chat_repository.rollback.await_count == 1
+
+
+@pytest.mark.asyncio
 async def test_post_message_defensive_project_id_check(
     chat_repository, message_repository, identity_client, project_client
 ):
@@ -670,8 +724,7 @@ async def test_post_message_defensive_project_id_check(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -701,8 +754,7 @@ async def test_post_message_maps_permission_error(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -734,8 +786,7 @@ async def test_patch_chat_returns_updated_chat(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -754,8 +805,7 @@ async def test_patch_chat_rejects_title_over_limit(
     project_client,
 ):
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -784,8 +834,7 @@ async def test_patch_chat_maps_missing_permission(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -809,8 +858,7 @@ async def test_delete_chat_returns_no_content(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -835,8 +883,7 @@ async def test_delete_chat_maps_chat_not_found(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -863,8 +910,7 @@ async def test_list_project_chats_returns_page(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -891,8 +937,7 @@ async def test_list_project_chats_maps_permission_error(
         11, 'ana', 'a@example.com'
     )
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -907,8 +952,7 @@ def test_list_project_chats_rejects_limit_out_of_range(
     chat_repository, message_repository, identity_client, project_client
 ):
     router = create_chat_routes(
-        lambda: _async_value(chat_repository),
-        lambda: _async_value(message_repository),
+        lambda: chat_repository,
         lambda: identity_client,
         lambda: project_client,
     )
@@ -932,7 +976,3 @@ def test_list_project_chats_rejects_limit_out_of_range(
 
     assert lower_bounds == [1]
     assert upper_bounds == [MAX_PAGE_LIMIT]
-
-
-async def _async_value(value):
-    return value

@@ -1,5 +1,5 @@
 # ruff: noqa: PLR0913, PLR0917
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from http import HTTPStatus
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
@@ -14,11 +14,9 @@ from project.exceptions import (
     ProjectUserAuthenticationException,
 )
 from project.handlers.errors import handle_project_error
-from project.repositories.asset import IAssetRepository
-from project.repositories.member import IMemberRepository
-from project.repositories.project import IProjectRepository
 from project.schemas.asset import AssetPageSchema, AssetSchema
 from project.storage import IStorage
+from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.assets import (
     add_asset,
     delete_asset,
@@ -29,9 +27,7 @@ from project.utils.pagination import decode_cursor, encode_cursor
 
 
 def create_assets_router(
-    project_repository_factory: Callable[[], Awaitable[IProjectRepository]],
-    member_repository_factory: Callable[[], Awaitable[IMemberRepository]],
-    asset_repository_factory: Callable[[], Awaitable[IAssetRepository]],
+    unit_of_work_factory: Callable[[], IProjectUnitOfWork],
     storage_factory: Callable[[], IStorage],
     user_client_factory: Callable[[], IUserClient],
 ) -> APIRouter:
@@ -54,17 +50,16 @@ def create_assets_router(
     ):
         try:
             user = await resolve_current_user(request.cookies)
-            page = await get_assets(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                await asset_repository_factory(),
-                storage_factory(),
-                project_id,
-                user.id,
-                PaginationDTO(cursor=decode_cursor(cursor), limit=limit),
-                type,
-                status,
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                page = await get_assets(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    PaginationDTO(cursor=decode_cursor(cursor), limit=limit),
+                    type,
+                    status,
+                )
             return AssetPageSchema(
                 items=[AssetSchema.from_dto(item) for item in page.items],
                 limit=page.pagination.limit,
@@ -84,22 +79,21 @@ def create_assets_router(
     ):
         try:
             user = await resolve_current_user(request.cookies)
-            dto = await add_asset(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                await asset_repository_factory(),
-                storage_factory(),
-                project_id,
-                user.id,
-                CreateAssetDTO(
-                    file='',
-                    asset='',
-                    type=type,
-                    name='',
-                    description=description or '',
-                ),
-                await file.read(),
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                dto = await add_asset(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    CreateAssetDTO(
+                        file='',
+                        asset='',
+                        type=type,
+                        name='',
+                        description=description or '',
+                    ),
+                    await file.read(),
+                )
             return AssetSchema.from_dto(dto)
         except ProjectException as error:
             return handle_project_error(error)
@@ -115,17 +109,16 @@ def create_assets_router(
     ):
         try:
             user = await resolve_current_user(request.cookies)
-            dto = await update_asset(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                await asset_repository_factory(),
-                storage_factory(),
-                project_id,
-                user.id,
-                asset_id,
-                UpdateAssetDTO(type=type, description=description),
-                await file.read() if file is not None else None,
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                dto = await update_asset(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    asset_id,
+                    UpdateAssetDTO(type=type, description=description),
+                    await file.read() if file is not None else None,
+                )
             return AssetSchema.from_dto(dto)
         except ProjectException as error:
             return handle_project_error(error)
@@ -138,15 +131,14 @@ def create_assets_router(
     ):
         try:
             user = await resolve_current_user(request.cookies)
-            await delete_asset(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                await asset_repository_factory(),
-                storage_factory(),
-                project_id,
-                user.id,
-                asset_id,
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                await delete_asset(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    asset_id,
+                )
             return Response(status_code=HTTPStatus.NO_CONTENT)
         except ProjectException as error:
             return handle_project_error(error)

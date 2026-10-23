@@ -1,5 +1,5 @@
 # ruff: noqa: PLR0913, PLR0917
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from http import HTTPStatus
 
 from fastapi import APIRouter, Query, Request
@@ -12,13 +12,12 @@ from project.exceptions import (
     ProjectUserAuthenticationException,
 )
 from project.handlers.errors import handle_project_error
-from project.repositories.member import IMemberRepository
-from project.repositories.project import IProjectRepository
 from project.schemas.project import (
     CreateProjectSchema,
     ProjectSchema,
     UpdateProjectSchema,
 )
+from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.project import (
     create_project,
     delete_project,
@@ -29,8 +28,7 @@ from project.utils.pagination import PageSchema, page_schema, pagination_dto
 
 
 def create_project_router(
-    project_repository_factory: Callable[[], Awaitable[IProjectRepository]],
-    member_repository_factory: Callable[[], Awaitable[IMemberRepository]],
+    unit_of_work_factory: Callable[[], IProjectUnitOfWork],
     user_client_factory: Callable[[], IUserClient],
 ) -> APIRouter:
     router = APIRouter(prefix='/projects', tags=['projects'])
@@ -50,12 +48,13 @@ def create_project_router(
     ) -> PageSchema[ProjectSchema] | JSONResponse:
         try:
             user = await resolve_current_user(request.cookies)
-            page = await get_projects(
-                await project_repository_factory(),
-                user.id,
-                name,
-                pagination_dto(cursor, limit),
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                page = await get_projects(
+                    unit_of_work,
+                    user.id,
+                    name,
+                    pagination_dto(cursor, limit),
+                )
             return page_schema(page)
         except ProjectException as error:
             return handle_project_error(error)
@@ -69,12 +68,12 @@ def create_project_router(
     ) -> ProjectDTO | JSONResponse:
         try:
             user = await resolve_current_user(request.cookies)
-            return await create_project(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                user.id,
-                CreateProjectDTO(name=data.name, owner=str(user.id)),
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                return await create_project(
+                    unit_of_work,
+                    user.id,
+                    CreateProjectDTO(name=data.name, owner=str(user.id)),
+                )
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -86,13 +85,13 @@ def create_project_router(
     ) -> ProjectDTO | JSONResponse:
         try:
             user = await resolve_current_user(request.cookies)
-            return await update_project(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                public_id,
-                user.id,
-                UpdateProjectDTO(name=data.name),
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                return await update_project(
+                    unit_of_work,
+                    public_id,
+                    user.id,
+                    UpdateProjectDTO(name=data.name),
+                )
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -105,12 +104,12 @@ def create_project_router(
     ) -> JSONResponse | None:
         try:
             user = await resolve_current_user(request.cookies)
-            await delete_project(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                public_id,
-                user.id,
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                await delete_project(
+                    unit_of_work,
+                    public_id,
+                    user.id,
+                )
             return None
         except ProjectException as error:
             return handle_project_error(error)

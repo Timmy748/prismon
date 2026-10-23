@@ -15,8 +15,7 @@ from project.exceptions import (
     ProjectNotFoundException,
 )
 from project.permissions import ProjectPermission, has_permission
-from project.repositories.member import IMemberRepository
-from project.repositories.project import IProjectRepository
+from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.project import _require_project_member
 
 
@@ -28,79 +27,71 @@ def _require_permission(
 
 
 async def get_members(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
+    uow: IProjectUnitOfWork,
     project_id: int,
     user_id: int,
     pagination: PaginationDTO = PaginationDTO(),
 ) -> CursorPage[MemberDTO]:
-    await _require_project_member(
-        project_repo, member_repo, project_id, user_id
-    )
-    return await member_repo.get_members(project_id, pagination)
+    await _require_project_member(uow, project_id, user_id)
+    return await uow.member_repository.get_members(project_id, pagination)
 
 
 async def invite_member(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
+    uow: IProjectUnitOfWork,
     project_id: int,
     actor_user_id: int,
     invited_user_id: int,
 ) -> MemberDTO:
-    _, actor = await _require_project_member(
-        project_repo, member_repo, project_id, actor_user_id
-    )
+    _, actor = await _require_project_member(uow, project_id, actor_user_id)
     _require_permission(actor.role, ProjectPermission.MEMBER_INVITE)
-    existing = await member_repo.get_members(
+    existing = await uow.member_repository.get_members(
         project_id,
         PaginationDTO(limit=100),
         user_id=invited_user_id,
     )
     if existing.items:
         raise MemberAlreadyExistsException(project_id, invited_user_id)
-    created = await member_repo.create_member(
+    created = await uow.member_repository.create_member(
         project_id, invited_user_id, MemberRole.MEMBER, MemberStatus.PENDING
     )
     if created is None:
         raise MemberNotFoundException(invited_user_id)
+    await uow.commit()
     return created
 
 
 async def change_member_role(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
+    uow: IProjectUnitOfWork,
     project_id: int,
     actor_user_id: int,
     member_id: int,
     data: ChangeRoleMemberDTO,
 ) -> MemberDTO:
-    _, actor = await _require_project_member(
-        project_repo, member_repo, project_id, actor_user_id
-    )
+    _, actor = await _require_project_member(uow, project_id, actor_user_id)
     _require_permission(actor.role, ProjectPermission.MEMBER_CHANGE_ROLE)
-    target = await member_repo.get_member(member_id)
+    target = await uow.member_repository.get_member(member_id)
     if target is None or target.project_id != project_id:
         raise MemberNotFoundException(member_id)
     try:
         role = MemberRole(data.new_role)
     except ValueError as exc:
         raise InvalidMemberRoleException(data.new_role) from exc
-    updated = await member_repo.update_member(member_id, role=role)
+    updated = await uow.member_repository.update_member(member_id, role=role)
     if updated is None:
         raise MemberNotFoundException(member_id)
+    await uow.commit()
     return updated
 
 
 async def respond_to_invitation(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
+    uow: IProjectUnitOfWork,
     project_id: int,
     user_id: int,
     data: ResumeInviteMemberDTO,
 ) -> MemberDTO:
-    if await project_repo.get_project(project_id) is None:
+    if await uow.project_repository.get_project(project_id) is None:
         raise ProjectNotFoundException(project_id)
-    page = await member_repo.get_members(
+    page = await uow.member_repository.get_members(
         project_id,
         PaginationDTO(limit=100),
         user_id=user_id,
@@ -110,28 +101,28 @@ async def respond_to_invitation(
         raise InvalidInvitationStateException(project_id, user_id)
     invitation = page.items[0]
     if not data.accept:
-        await member_repo.delete_member(invitation.id)
+        await uow.member_repository.delete_member(invitation.id)
+        await uow.commit()
         return invitation
-    updated = await member_repo.update_member(
+    updated = await uow.member_repository.update_member(
         invitation.id, status=MemberStatus.ACTIVE
     )
     if updated is None:
         raise InvalidInvitationStateException(project_id, user_id)
+    await uow.commit()
     return updated
 
 
 async def remove_member(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
+    uow: IProjectUnitOfWork,
     project_id: int,
     actor_user_id: int,
     member_id: int,
 ) -> None:
-    _, actor = await _require_project_member(
-        project_repo, member_repo, project_id, actor_user_id
-    )
+    _, actor = await _require_project_member(uow, project_id, actor_user_id)
     _require_permission(actor.role, ProjectPermission.MEMBER_REMOVE)
-    target = await member_repo.get_member(member_id)
+    target = await uow.member_repository.get_member(member_id)
     if target is None or target.project_id != project_id:
         raise MemberNotFoundException(member_id)
-    await member_repo.delete_member(member_id)
+    await uow.member_repository.delete_member(member_id)
+    await uow.commit()

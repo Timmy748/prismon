@@ -7,12 +7,8 @@ from agents.routes.workflows import create_workflow_routes
 from agents.utils.pagination import encode_cursor
 
 
-async def _async_value(value):
-    return value
-
-
 def test_list_workflows_maps_page_to_http_response(
-    api_client, workflow_repository
+    api_client, workflow_repository, workflow_uow
 ):
     timestamp = datetime(2025, 1, 2, tzinfo=UTC)
     cursor = (timestamp, 12)
@@ -29,7 +25,7 @@ def test_list_workflows_maps_page_to_http_response(
         ],
         PaginationDTO(cursor=cursor, limit=6, more=True),
     )
-    router = create_workflow_routes(lambda: _async_value(workflow_repository))
+    router = create_workflow_routes(lambda: workflow_uow)
     client = api_client(router)
     encoded_cursor = encode_cursor(cursor)
 
@@ -52,8 +48,10 @@ def test_list_workflows_maps_page_to_http_response(
     }
 
 
-def test_list_workflows_rejects_invalid_cursor(api_client, workflow_repository):
-    router = create_workflow_routes(lambda: _async_value(workflow_repository))
+def test_list_workflows_rejects_invalid_cursor(
+    api_client, workflow_repository, workflow_uow
+):
+    router = create_workflow_routes(lambda: workflow_uow)
     client = api_client(router)
 
     response = client.get('/workflows/?cursor=invalid')
@@ -65,9 +63,9 @@ def test_list_workflows_rejects_invalid_cursor(api_client, workflow_repository):
 
 
 def test_list_workflows_rejects_limit_above_maximum(
-    api_client, workflow_repository
+    api_client, workflow_repository, workflow_uow
 ):
-    router = create_workflow_routes(lambda: _async_value(workflow_repository))
+    router = create_workflow_routes(lambda: workflow_uow)
     client = api_client(router)
 
     response = client.get('/workflows/?limit=101')

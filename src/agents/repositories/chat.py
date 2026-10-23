@@ -3,7 +3,6 @@ from typing import Protocol
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agents.database import get_session_factory
 from agents.dtos.chat import ChatDTO
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.entities.chat import Chat
@@ -53,7 +52,7 @@ class ChatRepository(IChatRepository):
     ) -> ChatDTO:
         row = Chat(title=title, project_id=project_id, owner=owner)
         self._session.add(row)
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)
 
@@ -62,7 +61,7 @@ class ChatRepository(IChatRepository):
         if row is None:
             raise ChatNotFoundException(chat_id)
         await self._session.delete(row)
-        await self._session.commit()
+        await self._session.flush()
 
     async def get_chats_by_project(
         self,
@@ -108,12 +107,6 @@ class ChatRepository(IChatRepository):
         if row is None:
             raise ChatNotFoundException(chat_id)
         row.title = title
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)
-
-
-async def create_chat_repository() -> IChatRepository:  # pragma: no cover
-    session_maker = get_session_factory()
-    async with session_maker() as session:
-        return ChatRepository(session)

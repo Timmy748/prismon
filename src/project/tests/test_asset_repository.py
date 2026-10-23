@@ -75,6 +75,19 @@ async def test_update_asset_returns_none_when_missing(
 
 
 @pytest.mark.asyncio
+async def test_update_asset_without_values_preserves_existing_fields(
+    asset_repo: AssetRepository, sample_project
+) -> None:
+    created = await asset_repo.create_asset(
+        sample_project.id, 'url-old', 'logo', description='Keep this'
+    )
+
+    updated = await asset_repo.update_asset(created.id)
+
+    assert updated == created
+
+
+@pytest.mark.asyncio
 async def test_delete_asset_does_nothing_when_missing(
     asset_repo: AssetRepository,
 ) -> None:

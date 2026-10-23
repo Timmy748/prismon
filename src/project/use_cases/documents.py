@@ -17,16 +17,12 @@ from project.exceptions import (
     ProjectNotFoundException,
 )
 from project.permissions import ProjectPermission, has_permission
-from project.repositories.document import IDocumentRepository
-from project.repositories.member import IMemberRepository
-from project.repositories.project import IProjectRepository
 from project.storage import IStorage
+from project.unit_of_work import IProjectUnitOfWork
 
 
-async def _get_member(
-    member_repo: IMemberRepository, project_id: int, user_id: int
-):
-    members = await member_repo.get_members(
+async def _get_member(uow: IProjectUnitOfWork, project_id: int, user_id: int):
+    members = await uow.member_repository.get_members(
         project_id,
         pagination=PaginationDTO(limit=100),
         user_id=user_id,
@@ -38,15 +34,14 @@ async def _get_member(
 
 
 async def _authorize(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
+    uow: IProjectUnitOfWork,
     project_id: int,
     user_id: int,
     permission: ProjectPermission,
 ):
-    if await project_repo.get_project(project_id) is None:
+    if await uow.project_repository.get_project(project_id) is None:
         raise ProjectNotFoundException(project_id)
-    member = await _get_member(member_repo, project_id, user_id)
+    member = await _get_member(uow, project_id, user_id)
     if not has_permission(member.role, permission):
         raise InsufficientProjectPermissionException(permission)
     return member
@@ -57,9 +52,7 @@ def _new_storage_key(project_id: int) -> str:
 
 
 async def get_documents(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
-    document_repo: IDocumentRepository,
+    uow: IProjectUnitOfWork,
     storage: IStorage,
     project_id: int,
     user_id: int,
@@ -68,22 +61,19 @@ async def get_documents(
     status: DocumentStatus | None = None,
 ) -> CursorPage[DocumentDTO]:
     await _authorize(
-        project_repo,
-        member_repo,
+        uow,
         project_id,
         user_id,
         ProjectPermission.DOCUMENT_READ,
     )
     del storage  # Listing returns metadata; file contents remain in storage.
-    return await document_repo.get_documents(
+    return await uow.document_repository.get_documents(
         project_id, pagination, name, status
     )
 
 
 async def add_document(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
-    document_repo: IDocumentRepository,
+    uow: IProjectUnitOfWork,
     storage: IStorage,
     project_id: int,
     user_id: int,
@@ -91,8 +81,7 @@ async def add_document(
     content: bytes,
 ) -> DocumentDTO:
     member = await _authorize(
-        project_repo,
-        member_repo,
+        uow,
         project_id,
         user_id,
         ProjectPermission.DOCUMENT_CREATE,
@@ -105,18 +94,18 @@ async def add_document(
         else DocumentStatus.PENDING
     )
     try:
-        return await document_repo.create_document(
+        document = await uow.document_repository.create_document(
             project_id, key, data.name, data.description, status
         )
+        await uow.commit()
+        return document
     except Exception:
         storage.delete(key)
         raise
 
 
 async def update_document(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
-    document_repo: IDocumentRepository,
+    uow: IProjectUnitOfWork,
     storage: IStorage,
     project_id: int,
     user_id: int,
@@ -125,20 +114,19 @@ async def update_document(
     content: bytes | None = None,
 ) -> DocumentDTO:
     await _authorize(
-        project_repo,
-        member_repo,
+        uow,
         project_id,
         user_id,
         ProjectPermission.DOCUMENT_UPDATE,
     )
-    document = await document_repo.get_document(document_id)
+    document = await uow.document_repository.get_document(document_id)
     if document is None or document.project_id != project_id:
         raise DocumentNotFoundException(document_id)
     new_key = _new_storage_key(project_id) if content is not None else None
     if new_key is not None:
         storage.save(new_key, content)
     try:
-        updated = await document_repo.update_document(
+        updated = await uow.document_repository.update_document(
             document_id,
             file=new_key,
             name=data.name,
@@ -146,6 +134,7 @@ async def update_document(
         )
         if updated is None:
             raise DocumentNotFoundException(document_id)
+        await uow.commit()
     except Exception:
         if new_key is not None:
             storage.delete(new_key)
@@ -156,50 +145,45 @@ async def update_document(
 
 
 async def delete_document(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
-    document_repo: IDocumentRepository,
+    uow: IProjectUnitOfWork,
     storage: IStorage,
     project_id: int,
     user_id: int,
     document_id: int,
 ) -> None:
     await _authorize(
-        project_repo,
-        member_repo,
+        uow,
         project_id,
         user_id,
         ProjectPermission.DOCUMENT_DELETE,
     )
-    document = await document_repo.get_document(document_id)
+    document = await uow.document_repository.get_document(document_id)
     if document is None or document.project_id != project_id:
         raise DocumentNotFoundException(document_id)
-    await document_repo.delete_document(document_id)
+    await uow.document_repository.delete_document(document_id)
+    await uow.commit()
     storage.delete(document.file)
 
 
 async def review_document(
-    project_repo: IProjectRepository,
-    member_repo: IMemberRepository,
-    document_repo: IDocumentRepository,
+    uow: IProjectUnitOfWork,
     project_id: int,
     user_id: int,
     document_id: int,
     data: ApproveDocumentDTO,
 ) -> DocumentDTO:
     await _authorize(
-        project_repo,
-        member_repo,
+        uow,
         project_id,
         user_id,
         ProjectPermission.DOCUMENT_APPROVE,
     )
-    document = await document_repo.get_document(document_id)
+    document = await uow.document_repository.get_document(document_id)
     if document is None or document.project_id != project_id:
         raise DocumentNotFoundException(document_id)
     if document.status is not DocumentStatus.PENDING:
         raise InvalidDocumentStateException(document_id, document.status)
-    updated = await document_repo.update_document(
+    updated = await uow.document_repository.update_document(
         document_id,
         status=(
             DocumentStatus.PUBLISHED if data.accept else DocumentStatus.DRAFT
@@ -207,4 +191,5 @@ async def review_document(
     )
     if updated is None:
         raise DocumentNotFoundException(document_id)
+    await uow.commit()
     return updated

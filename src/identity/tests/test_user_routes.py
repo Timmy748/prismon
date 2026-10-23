@@ -13,6 +13,7 @@ async def test_post_user_success(
     user_client: AsyncClient,
     mock_user_repo,
     mock_password_hasher,
+    mock_unit_of_work,
 ):
     now = datetime.now(timezone.utc)
     mock_user = UserDTO(
@@ -41,6 +42,8 @@ async def test_post_user_success(
     assert data['id'] == 1
     assert data['username'] == 'ana'
     assert data['email'] == 'ana@example.com'
+    mock_unit_of_work.__aenter__.assert_awaited_once()
+    mock_unit_of_work.__aexit__.assert_awaited_once()
 
 
 @pytest.mark.asyncio

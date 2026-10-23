@@ -1,5 +1,5 @@
 # ruff: noqa: PLR0913, PLR0917
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from http import HTTPStatus
 
 from fastapi import APIRouter, Query, Request
@@ -13,13 +13,12 @@ from project.exceptions import (
     ProjectUserAuthenticationException,
 )
 from project.handlers.errors import handle_project_error
-from project.repositories.member import IMemberRepository
-from project.repositories.project import IProjectRepository
 from project.schemas.member import (
     ChangeMemberRoleSchema,
     InviteMemberSchema,
     MemberSchema,
 )
+from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.member import (
     change_member_role,
     get_members,
@@ -31,8 +30,7 @@ from project.utils.pagination import PageSchema, decode_cursor, encode_cursor
 
 
 def create_project_members_router(
-    project_repository_factory: Callable[[], Awaitable[IProjectRepository]],
-    member_repository_factory: Callable[[], Awaitable[IMemberRepository]],
+    unit_of_work_factory: Callable[[], IProjectUnitOfWork],
     user_client_factory: Callable[[], IUserClient],
 ) -> APIRouter:
     router = APIRouter(tags=['project members'])
@@ -55,13 +53,13 @@ def create_project_members_router(
     ) -> PageSchema[MemberSchema] | JSONResponse:
         try:
             user = await resolve_current_user(request.cookies)
-            page = await get_members(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                project_id,
-                user.id,
-                PaginationDTO(cursor=decode_cursor(cursor), limit=limit),
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                page = await get_members(
+                    unit_of_work,
+                    project_id,
+                    user.id,
+                    PaginationDTO(cursor=decode_cursor(cursor), limit=limit),
+                )
             return PageSchema[MemberSchema](
                 items=page.items,
                 limit=page.pagination.limit,
@@ -83,13 +81,13 @@ def create_project_members_router(
     ) -> MemberSchema | JSONResponse:
         try:
             user = await resolve_current_user(request.cookies)
-            return await invite_member(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                project_id,
-                user.id,
-                data.user_id,
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                return await invite_member(
+                    unit_of_work,
+                    project_id,
+                    user.id,
+                    data.user_id,
+                )
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -100,13 +98,13 @@ def create_project_members_router(
     ) -> MemberSchema | JSONResponse:
         try:
             user = await resolve_current_user(cookies)
-            return await respond_to_invitation(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                project_id,
-                user.id,
-                ResumeInviteMemberDTO(accept=accept),
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                return await respond_to_invitation(
+                    unit_of_work,
+                    project_id,
+                    user.id,
+                    ResumeInviteMemberDTO(accept=accept),
+                )
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -140,14 +138,14 @@ def create_project_members_router(
     ) -> MemberSchema | JSONResponse:
         try:
             user = await resolve_current_user(request.cookies)
-            return await change_member_role(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                project_id,
-                user.id,
-                member_id,
-                ChangeRoleMemberDTO(new_role=data.new_role),
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                return await change_member_role(
+                    unit_of_work,
+                    project_id,
+                    user.id,
+                    member_id,
+                    ChangeRoleMemberDTO(new_role=data.new_role),
+                )
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -163,13 +161,13 @@ def create_project_members_router(
     ) -> JSONResponse | None:
         try:
             user = await resolve_current_user(request.cookies)
-            await remove_member(
-                await project_repository_factory(),
-                await member_repository_factory(),
-                project_id,
-                user.id,
-                member_id,
-            )
+            async with unit_of_work_factory() as unit_of_work:
+                await remove_member(
+                    unit_of_work,
+                    project_id,
+                    user.id,
+                    member_id,
+                )
             return None
         except ProjectException as error:
             return handle_project_error(error)

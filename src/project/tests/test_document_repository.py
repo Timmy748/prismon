@@ -78,6 +78,19 @@ async def test_update_document_returns_none_when_missing(
 
 
 @pytest.mark.asyncio
+async def test_update_document_without_values_preserves_existing_fields(
+    document_repo: DocumentRepository, sample_project
+) -> None:
+    created = await document_repo.create_document(
+        sample_project.id, 'url-old', 'Draft', description='Keep this'
+    )
+
+    updated = await document_repo.update_document(created.id)
+
+    assert updated == created
+
+
+@pytest.mark.asyncio
 async def test_delete_document_does_nothing_when_missing(
     document_repo: DocumentRepository,
 ) -> None:

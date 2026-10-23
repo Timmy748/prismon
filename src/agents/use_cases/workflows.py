@@ -1,9 +1,9 @@
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.dtos.workflow import WorkflowDTO
-from agents.repositories.workflow import IWorkflowRepository
+from agents.unit_of_work import IAgentsUnitOfWork
 
 
 async def get_workflows(
-    workflow_repo: IWorkflowRepository, pagination: PaginationDTO
+    uow: IAgentsUnitOfWork, pagination: PaginationDTO
 ) -> CursorPage[WorkflowDTO]:
-    return await workflow_repo.get_workflows(pagination)
+    return await uow.workflow_repository.get_workflows(pagination)

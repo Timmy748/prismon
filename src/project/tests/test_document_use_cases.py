@@ -20,6 +20,7 @@ from project.exceptions import (
     InvalidDocumentStateException,
     ProjectNotFoundException,
 )
+from project.tests.fixtures.mock import make_unit_of_work
 from project.use_cases.documents import (
     add_document,
     delete_document,
@@ -85,12 +86,13 @@ async def test_get_documents_authorizes_member_and_forwards_filters(
     repos, storage
 ):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     expected = CursorPage([], PaginationDTO(limit=7))
     document_repo.get_documents.return_value = expected
     page = await get_documents(
-        project_repo,
-        member_repo,
-        document_repo,
+        unit_of_work,
         storage,
         1,
         20,
@@ -107,46 +109,50 @@ async def test_get_documents_authorizes_member_and_forwards_filters(
 @pytest.mark.asyncio
 async def test_get_documents_rejects_unknown_project(repos, storage):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     project_repo.get_project.return_value = None
     with pytest.raises(ProjectNotFoundException):
-        await get_documents(
-            project_repo, member_repo, document_repo, storage, 99, 20
-        )
+        await get_documents(unit_of_work, storage, 99, 20)
 
 
 @pytest.mark.asyncio
 async def test_get_documents_rejects_nonmember(repos, storage):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     member_repo.get_members.side_effect = None
     member_repo.get_members.return_value = CursorPage([], PaginationDTO())
     with pytest.raises(ProjectNotFoundException):
-        await get_documents(
-            project_repo, member_repo, document_repo, storage, 1, 21
-        )
+        await get_documents(unit_of_work, storage, 1, 21)
 
 
 @pytest.mark.asyncio
 async def test_get_documents_allows_collaborator_read(repos, storage):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     now = datetime.now(timezone.utc)
     guest = MemberDTO(
         3, 1, MemberRole.COLLABORATOR, MemberStatus.ACTIVE, 30, now, now
     )
     member_repo.get_members.return_value = CursorPage([guest], PaginationDTO())
-    await get_documents(
-        project_repo, member_repo, document_repo, storage, 1, 30
-    )
+    await get_documents(unit_of_work, storage, 1, 30)
     document_repo.get_documents.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_add_document_saves_bytes_and_sets_member_pending(repos, storage):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     document_repo.create_document.return_value = _doc()
     result = await add_document(
-        project_repo,
-        member_repo,
-        document_repo,
+        unit_of_work,
         storage,
         1,
         20,
@@ -165,13 +171,14 @@ async def test_add_document_saves_bytes_and_sets_member_pending(repos, storage):
 @pytest.mark.asyncio
 async def test_add_document_publishes_for_owner(repos, storage):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     document_repo.create_document.return_value = _doc(
         status=DocumentStatus.PUBLISHED
     )
     await add_document(
-        project_repo,
-        member_repo,
-        document_repo,
+        unit_of_work,
         storage,
         1,
         10,
@@ -187,12 +194,13 @@ async def test_add_document_publishes_for_owner(repos, storage):
 @pytest.mark.asyncio
 async def test_add_document_cleans_storage_if_repository_fails(repos, storage):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     document_repo.create_document.side_effect = RuntimeError
     with pytest.raises(RuntimeError):
         await add_document(
-            project_repo,
-            member_repo,
-            document_repo,
+            unit_of_work,
             storage,
             1,
             20,
@@ -206,12 +214,13 @@ async def test_add_document_cleans_storage_if_repository_fails(repos, storage):
 @pytest.mark.asyncio
 async def test_update_document_replaces_file_after_update(repos, storage):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     document_repo.get_document.return_value = _doc()
     document_repo.update_document.return_value = _doc(file='new-key')
     result = await update_document(
-        project_repo,
-        member_repo,
-        document_repo,
+        unit_of_work,
         storage,
         1,
         10,
@@ -228,12 +237,13 @@ async def test_update_document_replaces_file_after_update(repos, storage):
 @pytest.mark.asyncio
 async def test_update_document_without_file_preserves_storage(repos, storage):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     document_repo.get_document.return_value = _doc()
     document_repo.update_document.return_value = _doc()
     await update_document(
-        project_repo,
-        member_repo,
-        document_repo,
+        unit_of_work,
         storage,
         1,
         10,
@@ -249,12 +259,13 @@ async def test_update_document_without_file_preserves_storage(repos, storage):
 @pytest.mark.asyncio
 async def test_update_document_rejects_wrong_project(repos, storage):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     document_repo.get_document.return_value = _doc(project_id=2)
     with pytest.raises(DocumentNotFoundException):
         await update_document(
-            project_repo,
-            member_repo,
-            document_repo,
+            unit_of_work,
             storage,
             1,
             10,
@@ -268,6 +279,9 @@ async def test_update_document_rejects_role_without_update_permission(
     repos, storage
 ):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     now = datetime.now(timezone.utc)
     collaborator = MemberDTO(
         3, 1, MemberRole.COLLABORATOR, MemberStatus.ACTIVE, 30, now, now
@@ -277,9 +291,7 @@ async def test_update_document_rejects_role_without_update_permission(
     )
     with pytest.raises(InsufficientProjectPermissionException):
         await update_document(
-            project_repo,
-            member_repo,
-            document_repo,
+            unit_of_work,
             storage,
             1,
             30,
@@ -294,13 +306,14 @@ async def test_update_document_cleans_new_file_when_record_disappears(
     repos, storage
 ):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     document_repo.get_document.return_value = _doc()
     document_repo.update_document.return_value = None
     with pytest.raises(DocumentNotFoundException):
         await update_document(
-            project_repo,
-            member_repo,
-            document_repo,
+            unit_of_work,
             storage,
             1,
             10,
@@ -315,12 +328,37 @@ async def test_update_document_cleans_new_file_when_record_disappears(
 
 
 @pytest.mark.asyncio
+async def test_update_document_does_not_clean_storage_without_replacement(
+    repos, storage
+):
+    project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
+    document_repo.get_document.return_value = _doc()
+    document_repo.update_document.return_value = None
+
+    with pytest.raises(DocumentNotFoundException):
+        await update_document(
+            unit_of_work,
+            storage,
+            1,
+            10,
+            4,
+            UpdateDocumentDTO(name='Updated'),
+        )
+
+    assert storage.deleted == []
+
+
+@pytest.mark.asyncio
 async def test_delete_document_removes_record_and_file(repos, storage):
     project_repo, member_repo, document_repo = repos
-    document_repo.get_document.return_value = _doc()
-    await delete_document(
-        project_repo, member_repo, document_repo, storage, 1, 20, 4
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
     )
+    document_repo.get_document.return_value = _doc()
+    await delete_document(unit_of_work, storage, 1, 20, 4)
     document_repo.delete_document.assert_awaited_once_with(4)
     assert storage.deleted == ['old-key']
 
@@ -328,11 +366,12 @@ async def test_delete_document_removes_record_and_file(repos, storage):
 @pytest.mark.asyncio
 async def test_delete_document_rejects_missing_document(repos, storage):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     document_repo.get_document.return_value = None
     with pytest.raises(DocumentNotFoundException):
-        await delete_document(
-            project_repo, member_repo, document_repo, storage, 1, 20, 4
-        )
+        await delete_document(unit_of_work, storage, 1, 20, 4)
 
 
 @pytest.mark.asyncio
@@ -342,12 +381,13 @@ async def test_delete_document_rejects_missing_document(repos, storage):
 )
 async def test_review_document_changes_status(repos, accept, status):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     document_repo.get_document.return_value = _doc()
     document_repo.update_document.return_value = _doc(status=status)
     result = await review_document(
-        project_repo,
-        member_repo,
-        document_repo,
+        unit_of_work,
         1,
         10,
         4,
@@ -360,12 +400,13 @@ async def test_review_document_changes_status(repos, accept, status):
 @pytest.mark.asyncio
 async def test_review_document_rejects_nonpending_document(repos):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     document_repo.get_document.return_value = _doc(status=DocumentStatus.DRAFT)
     with pytest.raises(InvalidDocumentStateException):
         await review_document(
-            project_repo,
-            member_repo,
-            document_repo,
+            unit_of_work,
             1,
             10,
             4,
@@ -379,12 +420,13 @@ async def test_review_document_rejects_missing_or_wrong_project(
     repos, document
 ):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     document_repo.get_document.return_value = document
     with pytest.raises(DocumentNotFoundException):
         await review_document(
-            project_repo,
-            member_repo,
-            document_repo,
+            unit_of_work,
             1,
             10,
             4,
@@ -396,13 +438,14 @@ async def test_review_document_rejects_missing_or_wrong_project(
 @pytest.mark.asyncio
 async def test_review_document_rejects_missing_record_after_update(repos):
     project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
     document_repo.get_document.return_value = _doc()
     document_repo.update_document.return_value = None
     with pytest.raises(DocumentNotFoundException):
         await review_document(
-            project_repo,
-            member_repo,
-            document_repo,
+            unit_of_work,
             1,
             10,
             4,

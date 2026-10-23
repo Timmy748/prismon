@@ -3,7 +3,6 @@ from typing import Any, Protocol
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agents.database import get_session_factory
 from agents.dtos.message import MessageDTO
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.entities.message import Message, SenderType
@@ -71,7 +70,7 @@ class MessageRepository(IMessageRepository):
             meta_data=meta_data,
         )
         self._session.add(row)
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)
 
@@ -85,7 +84,7 @@ class MessageRepository(IMessageRepository):
             meta_data={},
         )
         self._session.add(row)
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)
 
@@ -133,12 +132,6 @@ class MessageRepository(IMessageRepository):
         row.text = text
         row.payload = payload
         row.meta_data = meta_data
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)
-
-
-async def create_message_repository() -> IMessageRepository:  # pragma: no cover
-    session_maker = get_session_factory()
-    async with session_maker() as session:
-        return MessageRepository(session)

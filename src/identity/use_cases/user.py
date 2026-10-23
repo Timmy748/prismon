@@ -10,17 +10,17 @@ from identity.exceptions import (
     UserAlreadyExistsException,
     UserNotFoundException,
 )
-from identity.repositories.user import IUserRepository
 from identity.security.jwt import ITokenProvider
 from identity.security.password_hasher import PasswordHasher
+from identity.unit_of_work import IIdentityUnitOfWork
 
 
 async def create_user(
-    user_repo: IUserRepository,
+    uow: IIdentityUnitOfWork,
     password_hasher: PasswordHasher,
     data: CreateUserDTO,
 ) -> UserDTO:
-    existing_user = await user_repo.get_user(
+    existing_user = await uow.user_repository.get_user(
         email=data.email, username=data.username
     )
     if existing_user:
@@ -29,25 +29,27 @@ async def create_user(
         raise UserAlreadyExistsException('username')
 
     hashed_password = password_hasher.hash(data.password_hash)
-    return await user_repo.create_user(
+    user = await uow.user_repository.create_user(
         username=data.username,
         email=data.email,
         password_hash=hashed_password,
     )
+    await uow.commit()
+    return user
 
 
 async def get_user_by_id(
-    user_repo: IUserRepository,
+    uow: IIdentityUnitOfWork,
     id: int,
 ) -> UserDTO:
-    user = await user_repo.get_user_by_id(id)
+    user = await uow.user_repository.get_user_by_id(id)
     if not user:
         raise UserNotFoundException(id)
     return user
 
 
 async def get_current_user(
-    user_repo: IUserRepository,
+    uow: IIdentityUnitOfWork,
     token_provider: ITokenProvider,
     access_token: str,
 ) -> UserDTO:
@@ -57,18 +59,18 @@ async def get_current_user(
     except (ValueError, KeyError, TypeError) as exc:
         raise InvalidTokenException() from exc
 
-    user = await user_repo.get_user_by_id(user_id)
+    user = await uow.user_repository.get_user_by_id(user_id)
     if user is None:
         raise InvalidTokenException()
     return user
 
 
 async def update_user(
-    user_repo: IUserRepository,
+    uow: IIdentityUnitOfWork,
     id: int,
     data: UpdateUserDTO,
 ) -> UserDTO:
-    existing_user = await user_repo.get_user(
+    existing_user = await uow.user_repository.get_user(
         email=data.email, username=data.username
     )
     if existing_user:
@@ -76,20 +78,22 @@ async def update_user(
             raise UserAlreadyExistsException('email')
         raise UserAlreadyExistsException('username')
 
-    return await user_repo.update_user(
+    user = await uow.user_repository.update_user(
         id=id,
         username=data.username,
         email=data.email,
     )
+    await uow.commit()
+    return user
 
 
 async def change_password(
-    user_repo: IUserRepository,
+    uow: IIdentityUnitOfWork,
     password_hasher: PasswordHasher,
     id: int,
     data: UpdateUserPasswordDTO,
 ) -> UserDTO:
-    user = await user_repo.get_user_by_id(id)
+    user = await uow.user_repository.get_user_by_id(id)
     if not user:
         raise UserNotFoundException(id)
 
@@ -97,14 +101,19 @@ async def change_password(
         raise IncorrectPasswordException()
 
     new_hash = password_hasher.hash(data.new_password)
-    return await user_repo.change_user_password(id=id, password_hash=new_hash)
+    updated_user = await uow.user_repository.change_user_password(
+        id=id, password_hash=new_hash
+    )
+    await uow.commit()
+    return updated_user
 
 
 async def delete_user(
-    user_repo: IUserRepository,
+    uow: IIdentityUnitOfWork,
     id: int,
 ) -> None:
-    user = await user_repo.get_user_by_id(id)
+    user = await uow.user_repository.get_user_by_id(id)
     if not user:
         raise UserNotFoundException(id)
-    await user_repo.delete_user(id)
+    await uow.user_repository.delete_user(id)
+    await uow.commit()

@@ -3,7 +3,6 @@ from typing import Protocol
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agents.database import get_session_factory
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.dtos.workflow import WorkflowDTO
 from agents.entities.workflow import Workflow
@@ -59,11 +58,3 @@ class WorkflowRepository(IWorkflowRepository):
             [self._to_dto(row) for row in rows],
             PaginationDTO(cursor=next_cursor, limit=limit, more=more),
         )
-
-
-async def create_workflow_repository() -> (
-    IWorkflowRepository
-):  # pragma: no cover
-    session_maker = get_session_factory()
-    async with session_maker() as session:
-        return WorkflowRepository(session)

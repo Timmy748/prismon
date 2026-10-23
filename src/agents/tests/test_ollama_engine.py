@@ -149,6 +149,23 @@ def test_tool_calls_skips_non_mapping_entries():
     assert calls == []
 
 
+def test_metadata_avoids_zero_duration_generation_rate():
+    response = AIMessage(
+        content='answer',
+        usage_metadata={
+            'input_tokens': 2,
+            'output_tokens': 1,
+            'total_tokens': 3,
+        },
+    )
+
+    metadata = OllamaEngine._metadata(
+        MagicMock(), response, elapsed_seconds=0.0
+    )
+
+    assert metadata.tokens_per_second is None
+
+
 def test_tool_calls_skips_entries_with_invalid_name_or_arguments():
     response = SimpleNamespace(
         tool_calls=[

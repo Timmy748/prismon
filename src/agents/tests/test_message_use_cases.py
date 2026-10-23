@@ -99,7 +99,6 @@ async def test_send_message_stream_persists_unlinked_assistant_message(
 
     events = await send_message(
         chat_repository,
-        message_repository,
         project_client,
         3,
         9,
@@ -155,7 +154,6 @@ async def test_send_message_rejects_blank_user_text(
     with pytest.raises(EmptyMessageException):
         await send_message(
             chat_repository,
-            message_repository,
             project_client,
             3,
             9,
@@ -176,7 +174,6 @@ async def test_send_message_rejects_missing_chat(
     with pytest.raises(ChatNotFoundException):
         await send_message(
             chat_repository,
-            message_repository,
             project_client,
             3,
             9,
@@ -199,7 +196,6 @@ async def test_send_message_rejects_non_owner(
     with pytest.raises(ChatOwnerException):
         await send_message(
             chat_repository,
-            message_repository,
             project_client,
             3,
             9,
@@ -223,7 +219,6 @@ async def test_send_message_rejects_missing_project_permission(
     with pytest.raises(InsufficientProjectPermissionException):
         await send_message(
             chat_repository,
-            message_repository,
             project_client,
             3,
             9,
@@ -250,7 +245,6 @@ async def test_send_message_rejects_consecutive_user_message(
     with pytest.raises(MultipleSubmitError):
         await send_message(
             chat_repository,
-            message_repository,
             project_client,
             3,
             9,
@@ -270,7 +264,6 @@ async def test_send_message_checks_latest_message_with_limit_one(
 
     await send_message(
         chat_repository,
-        message_repository,
         project_client,
         3,
         9,
@@ -302,7 +295,6 @@ async def test_send_message_rejects_blank_workflow_response(
 
     events = await send_message(
         chat_repository,
-        message_repository,
         project_client,
         3,
         9,
@@ -333,7 +325,6 @@ async def test_send_message_stream_converts_generation_failure_to_error_event(
 
     events = await send_message(
         chat_repository,
-        message_repository,
         project_client,
         3,
         9,
@@ -366,7 +357,6 @@ async def test_send_message_ignores_empty_chunks_and_unknown_events(
     message_repository.create_ai_message.return_value = assistant
     events = await send_message(
         chat_repository,
-        message_repository,
         project_client,
         3,
         9,
@@ -393,7 +383,6 @@ async def test_send_message_emits_error_when_workflow_has_no_final_event(
     workflow_stub.workflow.stream.side_effect = no_final
     events = await send_message(
         chat_repository,
-        message_repository,
         project_client,
         3,
         9,
@@ -428,7 +417,6 @@ async def test_send_message_emits_error_if_chat_disappears_before_save(
     ]
     events = await send_message(
         chat_repository,
-        message_repository,
         project_client,
         3,
         9,
@@ -487,7 +475,6 @@ async def test_get_chat_messages_returns_page_after_authorization(
 
     result = await get_chat_messages(
         chat_repository,
-        message_repository,
         project_client,
         3,
         9,
