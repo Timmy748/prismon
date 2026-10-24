@@ -5,6 +5,9 @@ from types import ModuleType
 import agents.workflows as workflows_package
 from agents.llm_engine.base import ILLMEngine
 from agents.workflows.base import WorkflowExecution
+from core.logs import get_logger
+
+logger = get_logger(__name__)
 
 
 class WorkflowRegistry:
@@ -33,13 +36,22 @@ class WorkflowRegistry:
             )
 
         self._workflows[workflow_class.name] = workflow_class
+        logger.debug(
+            'Registered workflow: name=%s version=%s',
+            workflow_class.name,
+            workflow_class.version,
+        )
         return workflow_class
 
     def get_workflow(self, name: str, engine: ILLMEngine) -> WorkflowExecution:
         try:
             workflow_class = self._workflows[name]
         except KeyError as error:
+            logger.warning(
+                'Requested workflow is not registered: name=%s', name
+            )
             raise KeyError(f'Workflow {name!r} is not registered') from error
+        logger.debug('Creating workflow instance: name=%s', name)
         return workflow_class(engine=engine)
 
     def list_workflows(self) -> list[type[WorkflowExecution]]:

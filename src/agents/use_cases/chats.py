@@ -25,7 +25,10 @@ from agents.llm_engine.base import GenerationChunk, GenerationFinal
 from agents.llm_engine.ollama import OllamaEngine
 from agents.unit_of_work import IAgentsUnitOfWork
 from agents.workflows.registry import workflow_registry_factory
+from core.logs import get_logger
 from project.permissions import ProjectPermission
+
+logger = get_logger(__name__)
 
 
 async def _require_project_permission(
@@ -35,6 +38,12 @@ async def _require_project_permission(
     permission: ProjectPermission,
 ) -> None:
     if not await project_client.has_permission(project_id, user_id, permission):
+        logger.warning(
+            'Project permission denied: project_id=%d user_id=%d permission=%s',
+            project_id,
+            user_id,
+            permission.value,
+        )
         raise InsufficientProjectPermissionException(permission.value)
 
 
@@ -73,6 +82,9 @@ async def create_chat(
         owner=data.owner,
     )
     await uow.commit()
+    logger.info(
+        'Created chat: chat_id=%d project_id=%d', chat.id, chat.project_id
+    )
     return chat
 
 
@@ -90,9 +102,13 @@ async def get_chat_messages(
         user_id,
         ProjectPermission.CHAT_READ,
     )
-    return await uow.message_repository.get_messages_by_chat(
+    page = await uow.message_repository.get_messages_by_chat(
         chat_id, pagination
     )
+    logger.debug(
+        'Retrieved chat messages: chat_id=%d count=%d', chat_id, len(page.items)
+    )
+    return page
 
 
 async def send_message(
@@ -158,8 +174,18 @@ async def send_message(
                 },
             )
             await uow.commit()
+            logger.info(
+                'Completed assistant response: chat_id=%d message_id=%d',
+                chat_id,
+                saved_message.id,
+            )
             yield {'event': 'done', 'data': saved_message}
         except Exception as error:
+            logger.error(
+                'Assistant response failed: chat_id=%d error_type=%s',
+                chat_id,
+                type(error).__name__,
+            )
             await uow.rollback()
             yield {'event': 'error', 'data': {'message': str(error)}}
 
@@ -186,6 +212,7 @@ async def update_chat_title(
         chat_id, data.title
     )
     await uow.commit()
+    logger.info('Updated chat title: chat_id=%d', chat_id)
     return updated_chat
 
 
@@ -204,6 +231,7 @@ async def delete_chat(
     )
     await uow.chat_repository.delete_chat(chat_id)
     await uow.commit()
+    logger.info('Deleted chat: chat_id=%d', chat_id)
 
 
 async def get_project_chats(
@@ -219,9 +247,15 @@ async def get_project_chats(
         user_id,
         ProjectPermission.CHAT_READ,
     )
-    return await uow.chat_repository.get_chats_by_project(
+    page = await uow.chat_repository.get_chats_by_project(
         project_id=project_id,
         title=None,
         owner_id=None,
         pagination=pagination,
     )
+    logger.debug(
+        'Retrieved project chats: project_id=%d count=%d',
+        project_id,
+        len(page.items),
+    )
+    return page

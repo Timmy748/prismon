@@ -15,6 +15,9 @@ from agents.llm_engine.base import (
 )
 from agents.workflows.base import WorkflowExecution
 from agents.workflows.registry import workflow_registry
+from core.logs import get_logger
+
+logger = get_logger(__name__)
 
 CHAT_SYSTEM_PROMPT = (
     'Você é um assistente útil. Responda à mensagem do usuário.'
@@ -42,6 +45,11 @@ class ChatWorkflow(WorkflowExecution):
         self, thread_id: str, input: dict[str, Any]
     ) -> AsyncIterator[ChatGenerationEvent]:
         messages: list[MessageDTO] = input['messages']
+        logger.info(
+            'Starting chat workflow stream: thread_id=%s message_count=%d',
+            thread_id,
+            len(messages),
+        )
         async for event in self.graph.astream(
             {'messages': messages}, stream_mode='custom'
         ):
@@ -56,10 +64,16 @@ class ChatWorkflow(WorkflowExecution):
                 final = event
 
         if final is None:
+            logger.error('Chat workflow finished without a final generation')
             raise RuntimeError(
                 'Chat workflow finished without a final generation'
             )
 
+        logger.info(
+            'Chat workflow completed: thread_id=%s elapsed_seconds=%s',
+            thread_id,
+            final.usage.elapsed_seconds,
+        )
         return self._to_message(final)
 
     async def resume(
@@ -93,6 +107,9 @@ class ChatWorkflow(WorkflowExecution):
                     final = event
 
             if final is None:
+                logger.error(
+                    'Chat workflow engine stream returned no final generation'
+                )
                 raise RuntimeError(
                     'LLM engine stream finished without a final generation'
                 )

@@ -6,6 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.dtos.workflow import WorkflowDTO
 from agents.entities.workflow import Workflow
+from core.logs import get_logger
+
+logger = get_logger(__name__)
 
 
 class IWorkflowRepository(Protocol):
@@ -54,6 +57,7 @@ class WorkflowRepository(IWorkflowRepository):
         next_cursor = (
             (rows[-1].updated_at, rows[-1].id) if more and rows else None
         )
+        logger.debug('Listed workflows: count=%d more=%s', len(rows), more)
         return CursorPage(
             [self._to_dto(row) for row in rows],
             PaginationDTO(cursor=next_cursor, limit=limit, more=more),

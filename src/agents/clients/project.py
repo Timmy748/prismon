@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from typing import Protocol
 
+from core.logs import get_logger
 from project.dtos.page import PaginationDTO
 from project.entities.member import MemberRole, MemberStatus
 from project.permissions import ProjectPermission
@@ -12,6 +13,8 @@ from project.unit_of_work import (
     IProjectUnitOfWork,
     create_project_unit_of_work,
 )
+
+logger = get_logger(__name__)
 
 
 class IProjectClient(Protocol):
@@ -42,10 +45,26 @@ class ProjectClient:
                 status=MemberStatus.ACTIVE,
             )
         if not members.items:
+            logger.debug(
+                'Project permission denied: project_id=%d user_id=%d '
+                'permission=%s',
+                project_id,
+                user_id,
+                getattr(permission, 'value', permission),
+            )
             return False
-        return self._project_api.has_permission(
+        allowed = self._project_api.has_permission(
             MemberRole(members.items[0].role), permission
         )
+        logger.debug(
+            'Project permission checked: project_id=%d user_id=%d '
+            'permission=%s allowed=%s',
+            project_id,
+            user_id,
+            getattr(permission, 'value', permission),
+            allowed,
+        )
+        return allowed
 
 
 def create_project_client() -> ProjectClient:
