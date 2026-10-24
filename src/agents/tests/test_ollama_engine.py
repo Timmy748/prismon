@@ -1,3 +1,4 @@
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -20,6 +21,22 @@ from agents.llm_engine.ollama import OllamaEngine
 EXPECTED_OUTPUT_TOKENS = 20
 EXPECTED_TOTAL_TOKENS_FROM_METADATA = 7
 EXPECTED_TOKENS_PER_SECOND = 20.0
+
+
+@pytest.mark.asyncio
+async def test_generate_logs_and_reraises_model_error(
+    mock_ollama_llm, message_history, caplog
+):
+    mock_ollama_llm.llm.ainvoke = AsyncMock(
+        side_effect=RuntimeError('model unavailable')
+    )
+    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+
+    with caplog.at_level(logging.ERROR, logger='agents.llm_engine.ollama'):
+        with pytest.raises(RuntimeError, match='model unavailable'):
+            await engine.generate(message_history, 'system instructions')
+
+    assert 'LLM generation failed: error_type=RuntimeError' in caplog.text
 
 
 def test_constructor_configures_chat_ollama(monkeypatch, ollama_settings):

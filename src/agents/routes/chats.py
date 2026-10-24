@@ -33,6 +33,9 @@ from agents.use_cases.chats import (
 )
 from agents.utils.pagination import encode_cursor, pagination_dto
 from agents.utils.sse import format_sse
+from core.logs import get_logger
+
+logger = get_logger(__name__)
 
 
 def _message_page_schema(
@@ -65,6 +68,7 @@ def create_chat_routes(  # noqa: PLR0915
     async def resolve_current_user(cookies) -> UserDTO:
         access_token = cookies.get('jwt')
         if not access_token:
+            logger.info('Chat request rejected: missing authentication cookie')
             raise UserAuthenticationException()
         return await identity_client_factory().get_current_user(access_token)
 
@@ -78,6 +82,7 @@ def create_chat_routes(  # noqa: PLR0915
         limit: int = Query(default=50, ge=1, le=100),
     ) -> PageSchema[MessageSchema] | JSONResponse:
         try:
+            logger.info('Listing messages for chat: chat_id=%d', chat_id)
             user = await resolve_current_user(request.cookies)
             async with uow_factory() as uow:
                 page = await get_chat_messages(
@@ -89,6 +94,11 @@ def create_chat_routes(  # noqa: PLR0915
                 )
             return _message_page_schema(page)
         except AgentsException as error:
+            logger.info(
+                'Chat message listing rejected: chat_id=%d error_type=%s',
+                chat_id,
+                type(error).__name__,
+            )
             return handle_agents_error(error)
 
     @router.post(
@@ -101,6 +111,7 @@ def create_chat_routes(  # noqa: PLR0915
     ) -> StreamingResponse | JSONResponse:
         uow: IAgentsUnitOfWork | None = None
         try:
+            logger.info('Starting chat message request')
             user = await resolve_current_user(request.cookies)
             uow = uow_factory()
             await uow.__aenter__()
@@ -157,9 +168,20 @@ def create_chat_routes(  # noqa: PLR0915
                         yield format_sse(event_name, event_data)
                 except AgentsException as error:
                     failure = error
+                    logger.info(
+                        'Chat message stream rejected: chat_id=%d '
+                        'error_type=%s',
+                        chat_id,
+                        type(error).__name__,
+                    )
                     yield format_sse('error', {'detail': str(error)})
                 except Exception as error:
                     failure = error
+                    logger.error(
+                        'Chat message stream failed: chat_id=%d error_type=%s',
+                        chat_id,
+                        type(error).__name__,
+                    )
                     yield format_sse('error', {'detail': str(error)})
                 except BaseException as error:
                     failure = error
@@ -182,10 +204,18 @@ def create_chat_routes(  # noqa: PLR0915
                 },
             )
         except AgentsException as error:
+            logger.info(
+                'Chat message request rejected: error_type=%s',
+                type(error).__name__,
+            )
             if uow is not None:
                 await uow.__aexit__(*sys.exc_info())
             return handle_agents_error(error)
-        except BaseException:
+        except BaseException as error:
+            logger.error(
+                'Chat message request aborted before streaming: error_type=%s',
+                type(error).__name__,
+            )
             if uow is not None:
                 await uow.__aexit__(*sys.exc_info())
             raise
@@ -197,6 +227,7 @@ def create_chat_routes(  # noqa: PLR0915
         data: UpdateChatTitleSchema,
     ) -> ChatSchema | JSONResponse:
         try:
+            logger.info('Updating chat title: chat_id=%d', chat_id)
             user = await resolve_current_user(request.cookies)
             async with uow_factory() as uow:
                 chat = await update_chat_title(
@@ -208,6 +239,11 @@ def create_chat_routes(  # noqa: PLR0915
                 )
             return ChatSchema.from_dto(chat)
         except AgentsException as error:
+            logger.info(
+                'Chat title update rejected: chat_id=%d error_type=%s',
+                chat_id,
+                type(error).__name__,
+            )
             return handle_agents_error(error)
 
     @router.delete(
@@ -220,6 +256,7 @@ def create_chat_routes(  # noqa: PLR0915
         chat_id: int,
     ) -> Response | JSONResponse:
         try:
+            logger.info('Deleting chat: chat_id=%d', chat_id)
             user = await resolve_current_user(request.cookies)
             async with uow_factory() as uow:
                 await delete_chat(
@@ -230,6 +267,11 @@ def create_chat_routes(  # noqa: PLR0915
                 )
             return Response(status_code=HTTPStatus.NO_CONTENT)
         except AgentsException as error:
+            logger.info(
+                'Chat deletion rejected: chat_id=%d error_type=%s',
+                chat_id,
+                type(error).__name__,
+            )
             return handle_agents_error(error)
 
     @router.get(
@@ -242,6 +284,7 @@ def create_chat_routes(  # noqa: PLR0915
         limit: int = Query(default=50, ge=1, le=100),
     ) -> PageSchema[ChatSchema] | JSONResponse:
         try:
+            logger.info('Listing chats for project: project_id=%d', project_id)
             user = await resolve_current_user(request.cookies)
             async with uow_factory() as uow:
                 page = await get_project_chats(
@@ -253,6 +296,11 @@ def create_chat_routes(  # noqa: PLR0915
                 )
             return _chat_page_schema(page)
         except AgentsException as error:
+            logger.info(
+                'Project chat listing rejected: project_id=%d error_type=%s',
+                project_id,
+                type(error).__name__,
+            )
             return handle_agents_error(error)
 
     return router

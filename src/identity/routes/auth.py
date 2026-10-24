@@ -4,6 +4,7 @@ from http import HTTPStatus
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
+from core.logs import get_logger
 from identity.dtos.auth import LoginDTO
 from identity.dtos.user import UserDTO
 from identity.exceptions import IdentityException, InvalidTokenException
@@ -18,6 +19,8 @@ from identity.unit_of_work import (
 )
 from identity.use_cases.auth import login, logout, refresh_token
 from identity.use_cases.user import get_current_user
+
+logger = get_logger(__name__)
 
 
 def create_auth_router(
@@ -77,8 +80,10 @@ def create_auth_router(
                 path='/',
             )
 
+            logger.info('Login successful')
             return response
         except IdentityException as error:
+            logger.warning('Login rejected: %s', type(error).__name__)
             return handle_identity_error(error)
 
     @router.post('/refresh-token')
@@ -112,8 +117,12 @@ def create_auth_router(
                 path='/',
             )
 
+            logger.info('Refresh token rotated successfully')
             return response
         except IdentityException as error:
+            logger.warning(
+                'Refresh token request rejected: %s', type(error).__name__
+            )
             return handle_identity_error(error)
 
     @router.post(
@@ -133,7 +142,9 @@ def create_auth_router(
             response.delete_cookie(key='jwt', path='/')
             response.delete_cookie(key='refresh_token', path='/')
             response.status_code = HTTPStatus.NO_CONTENT
+            logger.info('Logout successful')
         except IdentityException as error:
+            logger.warning('Logout rejected: %s', type(error).__name__)
             return handle_identity_error(error)
         return response
 

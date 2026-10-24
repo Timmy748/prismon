@@ -5,7 +5,10 @@ from typing import Protocol
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 
+from core.logs import get_logger
 from identity.settings import get_settings
+
+logger = get_logger(__name__)
 
 
 class PasswordHasher(Protocol):
@@ -27,11 +30,15 @@ class Argonid2Hasher(PasswordHasher):
 
     def hash(self, password: str) -> str:
         hmac_password = self._hmac(password)
-        return self._ph.hash(hmac_password)
+        password_hash = self._ph.hash(hmac_password)
+        logger.debug('Password hash generated')
+        return password_hash
 
     def verify(self, plain_password: str, hashed_password: str) -> bool:
         hmac_password = self._hmac(plain_password)
-        return self._ph.verify(hmac_password, hashed_password)
+        is_valid = self._ph.verify(hmac_password, hashed_password)
+        logger.debug('Password verification completed: valid=%s', is_valid)
+        return is_valid
 
 
 def create_password_hasher() -> PasswordHasher:  # pragma: no cover

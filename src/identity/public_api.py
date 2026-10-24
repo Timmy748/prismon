@@ -2,10 +2,13 @@
 
 from collections.abc import Callable
 
+from core.logs import get_logger
 from identity.dtos.user import UserDTO
 from identity.security.jwt import ITokenProvider
 from identity.unit_of_work import IIdentityUnitOfWork
 from identity.use_cases.user import get_current_user, get_user_by_id
+
+logger = get_logger(__name__)
 
 
 class IdentityPublicAPI:
@@ -20,13 +23,19 @@ class IdentityPublicAPI:
         self._token_provider_factory = token_provider_factory
 
     async def get_by_id(self, user_id: int) -> UserDTO:
+        logger.debug('Identity public API user lookup started')
         async with self._unit_of_work_factory() as uow:
-            return await get_user_by_id(uow, user_id)
+            user = await get_user_by_id(uow, user_id)
+        logger.debug('Identity public API user lookup completed')
+        return user
 
     async def get_current_user(self, access_token: str) -> UserDTO:
+        logger.debug('Identity public API current-user lookup started')
         async with self._unit_of_work_factory() as uow:
-            return await get_current_user(
+            user = await get_current_user(
                 uow,
                 self._token_provider_factory(),
                 access_token,
             )
+        logger.debug('Identity public API current-user lookup completed')
+        return user

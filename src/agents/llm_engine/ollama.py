@@ -23,6 +23,9 @@ from agents.llm_engine.base import (
     ToolType,
 )
 from agents.settings import get_settings
+from core.logs import get_logger
+
+logger = get_logger(__name__)
 
 
 class OllamaEngine:
@@ -36,6 +39,9 @@ class OllamaEngine:
     @staticmethod
     def _create_llm() -> BaseChatModel:
         settings = get_settings()
+        logger.info(
+            'Configuring Ollama chat engine: model=%s', settings.OLLAMA_MODEL
+        )
         return ChatOllama(
             base_url=settings.OLLAMA_BASE_URL,
             model=settings.OLLAMA_MODEL,
@@ -179,6 +185,12 @@ class OllamaEngine:
         **kwargs: Any,
     ) -> GenerationResult[Any]:
         started = monotonic()
+        logger.info(
+            'Starting LLM generation: message_count=%d structured=%s tools=%d',
+            len(messages),
+            output_schema is not None,
+            len(tools or []),
+        )
         if output_schema is not None:
             runnable = self._llm.with_structured_output(
                 output_schema, include_raw=True
@@ -188,9 +200,15 @@ class OllamaEngine:
         else:
             runnable = self._llm
 
-        response = await runnable.ainvoke(
-            self._to_langchain_messages(messages, system_prompt), **kwargs
-        )
+        try:
+            response = await runnable.ainvoke(
+                self._to_langchain_messages(messages, system_prompt), **kwargs
+            )
+        except Exception as error:
+            logger.error(
+                'LLM generation failed: error_type=%s', type(error).__name__
+            )
+            raise
         elapsed = monotonic() - started
         structured_output = None
         raw_response = response
@@ -207,12 +225,18 @@ class OllamaEngine:
         if not isinstance(raw_response, (AIMessage, AIMessageChunk)):
             raise TypeError('Chat model runnable returned an invalid message')
 
-        return GenerationResult(
+        result = GenerationResult(
             raw_text=str(raw_response.content),
             structured_output=structured_output,
             tool_calls=self._tool_calls(raw_response),
             usage=self._metadata(self._llm, raw_response, elapsed),
         )
+        logger.info(
+            'LLM generation completed: elapsed_seconds=%.3f output_tokens=%s',
+            elapsed,
+            result.usage.output_tokens,
+        )
+        return result
 
     async def stream(
         self,
@@ -222,6 +246,11 @@ class OllamaEngine:
         tools: list[ToolType] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[GenerationChunk | GenerationFinal]:
+        logger.info(
+            'Starting streamed LLM generation: message_count=%d tools=%d',
+            len(messages),
+            len(tools or []),
+        )
         runnable = self._llm.bind_tools(tools) if tools else self._llm
         started = monotonic()
         text_parts: list[str] = []
@@ -245,8 +274,15 @@ class OllamaEngine:
             elif text_delta:
                 yield GenerationChunk(text_delta=text_delta)
         final_chunk = final_chunk or AIMessageChunk(content='')
-        yield GenerationFinal(
+        final = GenerationFinal(
             raw_text=''.join(text_parts),
             tool_calls=self._tool_calls(final_chunk),
             usage=self._metadata(self._llm, final_chunk, monotonic() - started),
         )
+        logger.info(
+            'Streamed LLM generation completed: elapsed_seconds=%.3f '
+            'output_tokens=%s',
+            final.usage.elapsed_seconds or 0,
+            final.usage.output_tokens,
+        )
+        yield final

@@ -1,5 +1,6 @@
 from collections.abc import Callable
 
+from core.logs import get_logger
 from project.dtos.asset import AssetDTO
 from project.dtos.document import DocumentDTO
 from project.dtos.page import CursorPage, PaginationDTO
@@ -14,6 +15,8 @@ from project.unit_of_work import (
 )
 from project.use_cases.assets import get_assets
 from project.use_cases.documents import get_documents
+
+logger = get_logger(__name__)
 
 
 class ProjectPublicAPI:
@@ -40,7 +43,7 @@ class ProjectPublicAPI:
         name: str | None = None,
     ) -> CursorPage[DocumentDTO]:
         async with self.unit_of_work_factory() as unit_of_work:
-            return await get_documents(
+            page = await get_documents(
                 uow=unit_of_work,
                 storage=self.storage_factory(),
                 project_id=project_id,
@@ -49,6 +52,12 @@ class ProjectPublicAPI:
                 status=DocumentStatus.PUBLISHED,
                 pagination=pagination,
             )
+        logger.debug(
+            'Public document listing completed: project_id=%s count=%s',
+            project_id,
+            len(page.items),
+        )
+        return page
 
     async def get_assets(
         self,
@@ -58,7 +67,7 @@ class ProjectPublicAPI:
         asset_type: str | None = None,
     ) -> CursorPage[AssetDTO]:
         async with self.unit_of_work_factory() as unit_of_work:
-            return await get_assets(
+            page = await get_assets(
                 uow=unit_of_work,
                 storage=self.storage_factory(),
                 project_id=project_id,
@@ -67,3 +76,9 @@ class ProjectPublicAPI:
                 status=AssetStatus.ACTIVE,
                 pagination=pagination,
             )
+        logger.debug(
+            'Public asset listing completed: project_id=%s count=%s',
+            project_id,
+            len(page.items),
+        )
+        return page

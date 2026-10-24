@@ -4,8 +4,11 @@ from typing import Protocol
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.logs import get_logger
 from identity.dtos.token import RefreshTokenDTO
 from identity.entities.token import RefreshToken
+
+logger = get_logger(__name__)
 
 
 class IRefreshTokenRepository(Protocol):
@@ -37,6 +40,7 @@ class RefreshTokenRepository(IRefreshTokenRepository):
         self._session.add(refresh_token)
         await self._session.flush()
         await self._session.refresh(refresh_token)
+        logger.debug('Refresh token repository create completed')
         return RefreshTokenDTO(
             id=refresh_token.id,
             user_id=refresh_token.user_id,
@@ -52,7 +56,9 @@ class RefreshTokenRepository(IRefreshTokenRepository):
         result = await self._session.execute(stmt)
         token = result.scalar_one_or_none()
         if token is None:
+            logger.debug('Refresh token repository lookup found no record')
             return None
+        logger.debug('Refresh token repository lookup completed')
         return RefreshTokenDTO(
             id=token.id,
             user_id=token.user_id,
@@ -66,6 +72,9 @@ class RefreshTokenRepository(IRefreshTokenRepository):
         if token is not None:
             token.revoked = True
             await self._session.flush()
+            logger.debug('Refresh token repository revoke completed')
+        else:
+            logger.debug('Refresh token repository revoke skipped: not found')
 
     async def revoke_refresh_tokens_by_user_id(self, user_id: int) -> None:
         stmt = (
@@ -75,3 +84,4 @@ class RefreshTokenRepository(IRefreshTokenRepository):
         )
         await self._session.execute(stmt)
         await self._session.flush()
+        logger.debug('Refresh token repository bulk revoke completed')

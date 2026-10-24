@@ -1,4 +1,5 @@
 # ruff: noqa: PLR0913, PLR0917
+from core.logs import get_logger
 from project.dtos.member import (
     ChangeRoleMemberDTO,
     MemberDTO,
@@ -18,11 +19,16 @@ from project.permissions import ProjectPermission, has_permission
 from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.project import _require_project_member
 
+logger = get_logger(__name__)
+
 
 def _require_permission(
     role: MemberRole, permission: ProjectPermission
 ) -> None:
     if not has_permission(role, permission):
+        logger.warning(
+            'Member permission denied: permission=%s', permission.value
+        )
         raise InsufficientProjectPermissionException(permission.value)
 
 
@@ -33,7 +39,13 @@ async def get_members(
     pagination: PaginationDTO = PaginationDTO(),
 ) -> CursorPage[MemberDTO]:
     await _require_project_member(uow, project_id, user_id)
-    return await uow.member_repository.get_members(project_id, pagination)
+    page = await uow.member_repository.get_members(project_id, pagination)
+    logger.debug(
+        'Project members loaded: project_id=%s count=%s',
+        project_id,
+        len(page.items),
+    )
+    return page
 
 
 async def invite_member(
@@ -57,6 +69,11 @@ async def invite_member(
     if created is None:
         raise MemberNotFoundException(invited_user_id)
     await uow.commit()
+    logger.info(
+        'Project member invited: project_id=%s invited_user_id=%s',
+        project_id,
+        invited_user_id,
+    )
     return created
 
 
@@ -80,6 +97,11 @@ async def change_member_role(
     if updated is None:
         raise MemberNotFoundException(member_id)
     await uow.commit()
+    logger.info(
+        'Project member role changed: project_id=%s member_id=%s',
+        project_id,
+        member_id,
+    )
     return updated
 
 
@@ -103,6 +125,11 @@ async def respond_to_invitation(
     if not data.accept:
         await uow.member_repository.delete_member(invitation.id)
         await uow.commit()
+        logger.info(
+            'Project invitation declined: project_id=%s user_id=%s',
+            project_id,
+            user_id,
+        )
         return invitation
     updated = await uow.member_repository.update_member(
         invitation.id, status=MemberStatus.ACTIVE
@@ -110,6 +137,11 @@ async def respond_to_invitation(
     if updated is None:
         raise InvalidInvitationStateException(project_id, user_id)
     await uow.commit()
+    logger.info(
+        'Project invitation accepted: project_id=%s user_id=%s',
+        project_id,
+        user_id,
+    )
     return updated
 
 
@@ -126,3 +158,8 @@ async def remove_member(
         raise MemberNotFoundException(member_id)
     await uow.member_repository.delete_member(member_id)
     await uow.commit()
+    logger.info(
+        'Project member removed: project_id=%s member_id=%s',
+        project_id,
+        member_id,
+    )

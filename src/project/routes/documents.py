@@ -5,6 +5,7 @@ from http import HTTPStatus
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
 
+from core.logs import get_logger
 from project.clients.client_user import IUserClient
 from project.dtos.document import (
     CreateDocumentDTO,
@@ -27,6 +28,8 @@ from project.use_cases.documents import (
     update_document,
 )
 from project.utils.pagination import decode_cursor, encode_cursor
+
+logger = get_logger(__name__)
 
 
 def create_documents_router(
@@ -53,6 +56,7 @@ def create_documents_router(
         name: str | None = Query(default=None),
         status: DocumentStatus | None = Query(default=None),
     ):
+        logger.info('Document route started: operation=list')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
@@ -65,12 +69,17 @@ def create_documents_router(
                     name,
                     status,
                 )
-            return DocumentPageSchema(
+            result = DocumentPageSchema(
                 items=[DocumentSchema.from_dto(item) for item in page.items],
                 limit=page.pagination.limit,
                 more=page.pagination.more,
                 cursor=encode_cursor(page.pagination.cursor),
             )
+            logger.info(
+                'Document route completed: operation=list item_count=%s',
+                len(page.items),
+            )
+            return result
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -84,6 +93,7 @@ def create_documents_router(
         description: str | None = Form(default=None),
         file: UploadFile = File(...),
     ):
+        logger.info('Document route started: operation=create')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
@@ -97,7 +107,9 @@ def create_documents_router(
                     ),
                     await file.read(),
                 )
-            return DocumentSchema.from_dto(dto)
+            result = DocumentSchema.from_dto(dto)
+            logger.info('Document route completed: operation=create')
+            return result
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -110,6 +122,7 @@ def create_documents_router(
         description: str | None = Form(default=None),
         file: UploadFile | None = File(default=None),
     ):
+        logger.info('Document route started: operation=update')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
@@ -122,7 +135,9 @@ def create_documents_router(
                     UpdateDocumentDTO(name=name, description=description),
                     await file.read() if file is not None else None,
                 )
-            return DocumentSchema.from_dto(dto)
+            result = DocumentSchema.from_dto(dto)
+            logger.info('Document route completed: operation=update')
+            return result
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -132,6 +147,7 @@ def create_documents_router(
         project_id: int,
         document_id: int,
     ):
+        logger.info('Document route started: operation=delete')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
@@ -142,6 +158,7 @@ def create_documents_router(
                     user.id,
                     document_id,
                 )
+            logger.info('Document route completed: operation=delete')
             return Response(status_code=HTTPStatus.NO_CONTENT)
         except ProjectException as error:
             return handle_project_error(error)

@@ -1,4 +1,5 @@
 # ruff: noqa: PLR2004
+from dataclasses import replace
 from datetime import datetime, timezone
 from http import HTTPStatus
 
@@ -128,6 +129,34 @@ async def test_update_project_maps_permission_error(
     )
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert 'detail' in response.json()
+
+
+@pytest.mark.asyncio
+async def test_update_project_returns_updated_project(
+    project_http_client,
+    project_route_dependencies,
+    authenticated_project_user,
+    sample_project_dto,
+):
+    project_repo, member_repo, _ = project_route_dependencies
+    project_repo.get_project.return_value = sample_project_dto
+    project_repo.update_project.return_value = replace(
+        sample_project_dto, name='Changed'
+    )
+    now = datetime.now(timezone.utc)
+    member_repo.get_members.return_value = CursorPage(
+        [MemberDTO(1, 12, MemberRole.OWNER, MemberStatus.ACTIVE, 7, now, now)],
+        PaginationDTO(),
+    )
+
+    response = await project_http_client.put(
+        '/projects/12',
+        json={'name': 'Changed'},
+        cookies={'jwt': 'valid'},
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.json()['name'] == 'Changed'
 
 
 @pytest.mark.asyncio

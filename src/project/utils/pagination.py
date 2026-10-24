@@ -6,7 +6,10 @@ from http import HTTPStatus
 from fastapi import HTTPException
 from pydantic import BaseModel
 
+from core.logs import get_logger
 from project.dtos.page import CursorPage, PaginationDTO
+
+logger = get_logger(__name__)
 
 
 class PageSchema[T](BaseModel):
@@ -53,6 +56,7 @@ def decode_cursor(cursor: str | None) -> tuple[datetime, int] | None:
         return timestamp, item_id
 
     except (ValueError, TypeError, json.JSONDecodeError) as error:
+        logger.warning('Invalid pagination cursor received')
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST, detail='Invalid cursor'
         ) from error

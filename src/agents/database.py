@@ -7,11 +7,16 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from agents.settings import get_settings
+from core.logs import get_logger
+
+logger = get_logger(__name__)
 
 
 @lru_cache
 def get_session_factory() -> async_sessionmaker[
     AsyncSession
 ]:  # pragma: no cover
-    engine = create_async_engine(get_settings().DATABASE_URL)
+    settings = get_settings()
+    logger.info('Creating agents database session factory')
+    engine = create_async_engine(settings.DATABASE_URL)
     return async_sessionmaker(engine, expire_on_commit=False)

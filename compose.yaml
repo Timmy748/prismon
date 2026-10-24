@@ -1,22 +1,21 @@
+include:
+  - path: compose.telemetry.yaml
+
 services:
   prismon_api:
     image: prismon_api
-    build: .
+    build:
+      context: .
+      dockerfile: dockerfile
     entrypoint: ["/app/entrypoint.sh"]
     ports: 
       - 8000:8000
     depends_on:
       postgres_db:
         condition: service_healthy
-    environment:
-        DATABASE_URL: ${DATABASE_URL}
-        PASSWORD_PEPPER: ${PASSWORD_PEPPER}
-        JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-        JWT_ALGORITHM: ${JWT_ALGORITHM}
-        JWT_EXPIRES_IN_MINUTES: ${JWT_EXPIRES_IN_MINUTES}
-        OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
-        OLLAMA_MODEL: ${OLLAMA_MODEL}
-        OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE}
+      otel_collector:
+        condition: service_started
+    env_file: .env
 
   postgres_db:
     image: postgres

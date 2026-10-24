@@ -7,6 +7,9 @@ from agents.dtos.message import MessageDTO
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.entities.message import Message, SenderType
 from agents.exceptions import MessageNotFoundException
+from core.logs import get_logger
+
+logger = get_logger(__name__)
 
 
 class IMessageRepository(Protocol):
@@ -72,6 +75,11 @@ class MessageRepository(IMessageRepository):
         self._session.add(row)
         await self._session.flush()
         await self._session.refresh(row)
+        logger.info(
+            'Created assistant message: chat_id=%d message_id=%d',
+            chat_id,
+            row.id,
+        )
         return self._to_dto(row)
 
     async def create_human_message(self, chat_id: int, text: str) -> MessageDTO:
@@ -86,6 +94,9 @@ class MessageRepository(IMessageRepository):
         self._session.add(row)
         await self._session.flush()
         await self._session.refresh(row)
+        logger.info(
+            'Created user message: chat_id=%d message_id=%d', chat_id, row.id
+        )
         return self._to_dto(row)
 
     async def get_messages_by_chat(
@@ -114,6 +125,12 @@ class MessageRepository(IMessageRepository):
         next_cursor = (
             (rows[-1].created_at, rows[-1].id) if more and rows else None
         )
+        logger.debug(
+            'Listed chat messages: chat_id=%d count=%d more=%s',
+            chat_id,
+            len(rows),
+            more,
+        )
         return CursorPage(
             [self._to_dto(row) for row in rows],
             PaginationDTO(cursor=next_cursor, limit=limit, more=more),
@@ -128,10 +145,14 @@ class MessageRepository(IMessageRepository):
     ) -> MessageDTO:
         row = await self._session.get(Message, message_id)
         if row is None:
+            logger.warning(
+                'Cannot update missing message: message_id=%d', message_id
+            )
             raise MessageNotFoundException(message_id)
         row.text = text
         row.payload = payload
         row.meta_data = meta_data
         await self._session.flush()
         await self._session.refresh(row)
+        logger.info('Updated message: message_id=%d', message_id)
         return self._to_dto(row)

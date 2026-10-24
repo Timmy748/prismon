@@ -4,7 +4,10 @@ from typing import Any, Dict, Protocol
 
 import jwt
 
+from core.logs import get_logger
 from identity.settings import get_settings
+
+logger = get_logger(__name__)
 
 
 class ITokenProvider(Protocol):
@@ -40,6 +43,7 @@ class JwtTokenProvider(ITokenProvider):
         token = jwt.encode(
             data_to_encode, self._secret_key, algorithm=self._algorithm
         )
+        logger.debug('Access token generated')
         return token
 
     def decode_access_token(self, token: str) -> Dict[str, Any]:
@@ -49,12 +53,18 @@ class JwtTokenProvider(ITokenProvider):
             )
             return decoded
         except jwt.ExpiredSignatureError:
+            logger.debug('Access token validation failed: token expired')
             raise ValueError('O token expirou.')
         except jwt.InvalidTokenError:
+            logger.debug('Access token validation failed: token invalid')
             raise ValueError('Token inválido.')
 
     def generate_refresh_token_hash(self, refresh_token_raw: str) -> str:
-        return hashlib.sha256(refresh_token_raw.encode('utf-8')).hexdigest()
+        token_hash = hashlib.sha256(
+            refresh_token_raw.encode('utf-8')
+        ).hexdigest()
+        logger.debug('Refresh token hash generated')
+        return token_hash
 
 
 def create_token_provider() -> ITokenProvider:  # pragma: no cover

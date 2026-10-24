@@ -15,6 +15,9 @@ from agents.exceptions import (
     UserAuthenticationException,
     UserNotFoundException,
 )
+from core.logs import get_logger
+
+logger = get_logger(__name__)
 
 DOMAIN_ERROR_STATUS: dict[type[AgentsException], HTTPStatus] = {
     ChatNotFoundException: HTTPStatus.NOT_FOUND,
@@ -33,6 +36,11 @@ DOMAIN_ERROR_STATUS: dict[type[AgentsException], HTTPStatus] = {
 def handle_agents_error(error: AgentsException) -> JSONResponse:
     status_code = DOMAIN_ERROR_STATUS.get(
         type(error), HTTPStatus.INTERNAL_SERVER_ERROR
+    )
+    logger.info(
+        'Handled agents domain error: error_type=%s status_code=%d',
+        type(error).__name__,
+        status_code,
     )
     return JSONResponse(
         status_code=status_code,

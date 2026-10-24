@@ -7,6 +7,9 @@ from agents.database import get_session_factory
 from agents.repositories.chat import ChatRepository, IChatRepository
 from agents.repositories.message import IMessageRepository, MessageRepository
 from agents.repositories.workflow import IWorkflowRepository, WorkflowRepository
+from core.logs import get_logger
+
+logger = get_logger(__name__)
 
 
 class IAgentsUnitOfWork(Protocol):
@@ -46,12 +49,14 @@ class AgentsUnitOfWork(IAgentsUnitOfWork):
 
     async def __aenter__(self) -> 'AgentsUnitOfWork':
         if self._session is not None:
+            logger.warning('Attempted to enter an active agents unit of work')
             raise RuntimeError('AgentsUnitOfWork is already active')
 
         self._session = self._session_factory()
         self._chat_repository = ChatRepository(self._session)
         self._message_repository = MessageRepository(self._session)
         self._workflow_repository = WorkflowRepository(self._session)
+        logger.debug('Agents unit of work started')
         return self
 
     async def __aexit__(
@@ -66,6 +71,10 @@ class AgentsUnitOfWork(IAgentsUnitOfWork):
 
         try:
             if exc_type is not None:
+                logger.warning(
+                    'Rolling back agents unit of work after an exception',
+                    exc_info=(exc_type, exc, traceback),
+                )
                 await session.rollback()
         finally:
             self._session = None
@@ -73,12 +82,21 @@ class AgentsUnitOfWork(IAgentsUnitOfWork):
             self._message_repository = None
             self._workflow_repository = None
             await session.close()
+            logger.debug('Agents unit of work closed')
 
     async def commit(self) -> None:
-        await self._require_session().commit()
+        try:
+            await self._require_session().commit()
+        except Exception:
+            logger.exception('Failed to commit agents unit of work')
+            raise
 
     async def rollback(self) -> None:
-        await self._require_session().rollback()
+        try:
+            await self._require_session().rollback()
+        except Exception:
+            logger.exception('Failed to roll back agents unit of work')
+            raise
 
     @property
     def chat_repository(self) -> IChatRepository:

@@ -5,6 +5,7 @@ from http import HTTPStatus
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
+from core.logs import get_logger
 from project.clients.client_user import IUserClient
 from project.dtos.member import ChangeRoleMemberDTO, ResumeInviteMemberDTO
 from project.dtos.page import PaginationDTO
@@ -27,6 +28,8 @@ from project.use_cases.member import (
     respond_to_invitation,
 )
 from project.utils.pagination import PageSchema, decode_cursor, encode_cursor
+
+logger = get_logger(__name__)
 
 
 def create_project_members_router(
@@ -51,6 +54,7 @@ def create_project_members_router(
         limit: int = Query(default=50, ge=1, le=100),
         cursor: str | None = Query(default=None),
     ) -> PageSchema[MemberSchema] | JSONResponse:
+        logger.info('Project member route started: operation=list')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
@@ -60,12 +64,17 @@ def create_project_members_router(
                     user.id,
                     PaginationDTO(cursor=decode_cursor(cursor), limit=limit),
                 )
-            return PageSchema[MemberSchema](
+            result = PageSchema[MemberSchema](
                 items=page.items,
                 limit=page.pagination.limit,
                 more=page.pagination.more,
                 cursor=encode_cursor(page.pagination.cursor),
             )
+            logger.info(
+                'Project member route completed: operation=list item_count=%s',
+                len(page.items),
+            )
+            return result
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -79,15 +88,18 @@ def create_project_members_router(
         project_id: int,
         data: InviteMemberSchema,
     ) -> MemberSchema | JSONResponse:
+        logger.info('Project member route started: operation=invite')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
-                return await invite_member(
+                member = await invite_member(
                     unit_of_work,
                     project_id,
                     user.id,
                     data.user_id,
                 )
+            logger.info('Project member route completed: operation=invite')
+            return member
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -96,15 +108,21 @@ def create_project_members_router(
         accept: bool,
         cookies,
     ) -> MemberSchema | JSONResponse:
+        operation = 'accept_invitation' if accept else 'decline_invitation'
+        logger.info('Project member route started: operation=%s', operation)
         try:
             user = await resolve_current_user(cookies)
             async with unit_of_work_factory() as unit_of_work:
-                return await respond_to_invitation(
+                member = await respond_to_invitation(
                     unit_of_work,
                     project_id,
                     user.id,
                     ResumeInviteMemberDTO(accept=accept),
                 )
+            logger.info(
+                'Project member route completed: operation=%s', operation
+            )
+            return member
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -136,16 +154,19 @@ def create_project_members_router(
         member_id: int,
         data: ChangeMemberRoleSchema,
     ) -> MemberSchema | JSONResponse:
+        logger.info('Project member route started: operation=change_role')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
-                return await change_member_role(
+                member = await change_member_role(
                     unit_of_work,
                     project_id,
                     user.id,
                     member_id,
                     ChangeRoleMemberDTO(new_role=data.new_role),
                 )
+            logger.info('Project member route completed: operation=change_role')
+            return member
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -159,6 +180,7 @@ def create_project_members_router(
         project_id: int,
         member_id: int,
     ) -> JSONResponse | None:
+        logger.info('Project member route started: operation=remove')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
@@ -168,6 +190,7 @@ def create_project_members_router(
                     user.id,
                     member_id,
                 )
+            logger.info('Project member route completed: operation=remove')
             return None
         except ProjectException as error:
             return handle_project_error(error)

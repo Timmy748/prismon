@@ -7,6 +7,9 @@ from agents.dtos.chat import ChatDTO
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.entities.chat import Chat
 from agents.exceptions import ChatNotFoundException
+from core.logs import get_logger
+
+logger = get_logger(__name__)
 
 
 class IChatRepository(Protocol):
@@ -45,6 +48,9 @@ class ChatRepository(IChatRepository):
 
     async def get_chat(self, chat_id: int) -> ChatDTO | None:
         row = await self._session.get(Chat, chat_id)
+        logger.debug(
+            'Loaded chat: chat_id=%d found=%s', chat_id, row is not None
+        )
         return self._to_dto(row) if row is not None else None
 
     async def create_chat(
@@ -54,14 +60,19 @@ class ChatRepository(IChatRepository):
         self._session.add(row)
         await self._session.flush()
         await self._session.refresh(row)
+        logger.info(
+            'Created chat: chat_id=%d project_id=%d', row.id, project_id
+        )
         return self._to_dto(row)
 
     async def delete_chat(self, chat_id: int) -> None:
         row = await self._session.get(Chat, chat_id)
         if row is None:
+            logger.warning('Cannot delete missing chat: chat_id=%d', chat_id)
             raise ChatNotFoundException(chat_id)
         await self._session.delete(row)
         await self._session.flush()
+        logger.info('Deleted chat: chat_id=%d', chat_id)
 
     async def get_chats_by_project(
         self,
@@ -97,6 +108,12 @@ class ChatRepository(IChatRepository):
         next_cursor = (
             (rows[-1].updated_at, rows[-1].id) if more and rows else None
         )
+        logger.debug(
+            'Listed project chats: project_id=%d count=%d more=%s',
+            project_id,
+            len(rows),
+            more,
+        )
         return CursorPage(
             [self._to_dto(row) for row in rows],
             PaginationDTO(cursor=next_cursor, limit=limit, more=more),
@@ -105,8 +122,10 @@ class ChatRepository(IChatRepository):
     async def update_chat_title(self, chat_id: int, title: str) -> ChatDTO:
         row = await self._session.get(Chat, chat_id)
         if row is None:
+            logger.warning('Cannot update missing chat: chat_id=%d', chat_id)
             raise ChatNotFoundException(chat_id)
         row.title = title
         await self._session.flush()
         await self._session.refresh(row)
+        logger.info('Updated chat title: chat_id=%d', chat_id)
         return self._to_dto(row)

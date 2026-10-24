@@ -12,6 +12,9 @@ from agents.unit_of_work import (
 )
 from agents.use_cases.workflows import get_workflows
 from agents.utils.pagination import encode_cursor, pagination_dto
+from core.logs import get_logger
+
+logger = get_logger(__name__)
 
 
 def _workflow_page_schema(
@@ -35,10 +38,13 @@ def create_workflow_routes(
         cursor: str | None = Query(default=None),
         limit: int = Query(default=50, ge=1, le=100),
     ) -> PageSchema[WorkflowSchema]:
+        logger.info('Listing available workflows')
         async with uow_factory() as uow:
             page: CursorPage[WorkflowDTO] = await get_workflows(
                 uow, pagination_dto(cursor, limit)
             )
-        return _workflow_page_schema(page)
+        result = _workflow_page_schema(page)
+        logger.info('Listed available workflows: count=%d', len(result.items))
+        return result
 
     return router

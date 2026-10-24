@@ -3,9 +3,12 @@ from typing import Protocol
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.logs import get_logger
 from identity.dtos.user import UserDTO
 from identity.entities.user import User
 from identity.exceptions import UserNotFoundException
+
+logger = get_logger(__name__)
 
 
 class IUserRepository(Protocol):
@@ -37,7 +40,9 @@ class UserRepository(IUserRepository):
     async def get_user_by_id(self, id: int) -> UserDTO | None:
         user = await self._session.get(User, id)
         if user is None:
+            logger.debug('User repository lookup by ID found no record')
             return None
+        logger.debug('User repository lookup by ID completed')
         return UserDTO(
             id=user.id,
             username=user.username,
@@ -57,6 +62,7 @@ class UserRepository(IUserRepository):
             conditions.append(User.username == username)
 
         if not conditions:
+            logger.debug('User repository lookup skipped: no criteria provided')
             return None
 
         stmt = select(User).where(or_(*conditions))
@@ -64,8 +70,10 @@ class UserRepository(IUserRepository):
         user = result.scalars().first()
 
         if user is None:
+            logger.debug('User repository lookup found no record')
             return None
 
+        logger.debug('User repository lookup completed')
         return UserDTO(
             id=user.id,
             username=user.username,
@@ -86,6 +94,7 @@ class UserRepository(IUserRepository):
         self._session.add(user)
         await self._session.flush()
         await self._session.refresh(user)
+        logger.debug('User repository create completed')
         return UserDTO(
             id=user.id,
             username=user.username,
@@ -100,6 +109,7 @@ class UserRepository(IUserRepository):
     ) -> UserDTO:
         user = await self._session.get(User, id)
         if user is None:
+            logger.warning('User repository update failed: record not found')
             raise UserNotFoundException(id)
 
         if username is not None:
@@ -109,6 +119,7 @@ class UserRepository(IUserRepository):
 
         await self._session.flush()
         await self._session.refresh(user)
+        logger.debug('User repository update completed')
         return UserDTO(
             id=user.id,
             username=user.username,
@@ -123,10 +134,14 @@ class UserRepository(IUserRepository):
     ) -> UserDTO:
         user = await self._session.get(User, id)
         if user is None:
+            logger.warning(
+                'User repository password update failed: record not found'
+            )
             raise UserNotFoundException(id)
         user.password_hash = password_hash
         await self._session.flush()
         await self._session.refresh(user)
+        logger.debug('User repository password update completed')
         return UserDTO(
             id=user.id,
             username=user.username,
@@ -141,3 +156,6 @@ class UserRepository(IUserRepository):
         if user is not None:
             await self._session.delete(user)
             await self._session.flush()
+            logger.debug('User repository delete completed')
+        else:
+            logger.debug('User repository delete skipped: record not found')

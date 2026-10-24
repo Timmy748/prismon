@@ -1,6 +1,7 @@
 # ruff: noqa: PLR0913, PLR0917
 from uuid import uuid4
 
+from core.logs import get_logger
 from project.dtos.asset import (
     ApproveAssetDTO,
     AssetDTO,
@@ -19,6 +20,8 @@ from project.exceptions import (
 from project.permissions import ProjectPermission, has_permission
 from project.storage import IStorage
 from project.unit_of_work import IProjectUnitOfWork
+
+logger = get_logger(__name__)
 
 
 async def _get_active_member(
@@ -65,9 +68,13 @@ async def get_assets(
         ProjectPermission.ASSET_READ,
     )
     del storage  # Listing returns metadata; file contents remain in storage.
-    return await uow.asset_repository.get_assets(
+    page = await uow.asset_repository.get_assets(
         project_id, pagination, asset_type, status
     )
+    logger.debug(
+        'Assets loaded: project_id=%s count=%s', project_id, len(page.items)
+    )
+    return page
 
 
 async def add_asset(
@@ -100,8 +107,10 @@ async def add_asset(
             status=status,
         )
         await uow.commit()
+        logger.info('Asset created: project_id=%s', project_id)
         return asset
     except Exception:
+        logger.exception('Asset creation failed: project_id=%s', project_id)
         storage.delete(key)
         raise
 
@@ -138,7 +147,15 @@ async def update_asset(
         if updated is None:
             raise AssetNotFoundException(asset_id)
         await uow.commit()
+        logger.info(
+            'Asset updated: project_id=%s asset_id=%s', project_id, asset_id
+        )
     except Exception:
+        logger.exception(
+            'Asset update failed: project_id=%s asset_id=%s',
+            project_id,
+            asset_id,
+        )
         if content is not None:
             storage.delete(new_key)
         raise
@@ -166,6 +183,9 @@ async def delete_asset(
     await uow.asset_repository.delete_asset(asset_id)
     await uow.commit()
     storage.delete(asset.file)
+    logger.info(
+        'Asset deleted: project_id=%s asset_id=%s', project_id, asset_id
+    )
 
 
 async def review_asset(
@@ -193,4 +213,10 @@ async def review_asset(
     if updated is None:
         raise AssetNotFoundException(asset_id)
     await uow.commit()
+    logger.info(
+        'Asset review completed: project_id=%s asset_id=%s accepted=%s',
+        project_id,
+        asset_id,
+        data.accept,
+    )
     return updated

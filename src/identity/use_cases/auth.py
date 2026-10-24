@@ -1,6 +1,7 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
+from core.logs import get_logger
 from identity.dtos.auth import AuthenticationDTO, LoginDTO
 from identity.exceptions import (
     InvalidCredentialsException,
@@ -11,6 +12,8 @@ from identity.security.jwt import ITokenProvider
 from identity.security.password_hasher import PasswordHasher
 from identity.unit_of_work import IIdentityUnitOfWork
 
+logger = get_logger(__name__)
+
 
 async def login(
     uow: IIdentityUnitOfWork,
@@ -20,9 +23,11 @@ async def login(
 ) -> AuthenticationDTO:
     user = await uow.user_repository.get_user(email=data.email)
     if not user:
+        logger.warning('Login failed: account lookup returned no user')
         raise InvalidCredentialsException()
 
     if not password_hasher.verify(data.password, user.password_hash):
+        logger.warning('Login failed: password verification failed')
         raise InvalidCredentialsException()
 
     access_token = token_provider.generate_access_token({'sub': str(user.id)})
@@ -36,6 +41,7 @@ async def login(
         expires_at=expires_at,
     )
     await uow.commit()
+    logger.info('Authentication completed successfully')
 
     return AuthenticationDTO(
         access_token=access_token,
@@ -54,9 +60,11 @@ async def refresh_token(
     )
 
     if not token_dto or token_dto.revoked:
+        logger.warning('Refresh token rejected: token is missing or revoked')
         raise InvalidTokenException()
 
     if token_dto.expires_at < datetime.now(timezone.utc):
+        logger.warning('Refresh token rejected: token expired')
         raise TokenExpiredException()
 
     await uow.token_repository.revoke_refresh_token(token_dto.id)
@@ -76,6 +84,7 @@ async def refresh_token(
         expires_at=expires_at,
     )
     await uow.commit()
+    logger.info('Refresh token rotated successfully')
 
     return AuthenticationDTO(
         access_token=access_token,
@@ -89,3 +98,4 @@ async def logout(
 ) -> None:
     await uow.token_repository.revoke_refresh_tokens_by_user_id(user_id)
     await uow.commit()
+    logger.info('Refresh tokens revoked for user')

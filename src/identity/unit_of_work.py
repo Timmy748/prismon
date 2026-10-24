@@ -3,12 +3,15 @@ from typing import Protocol, Self
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from core.logs import get_logger
 from identity.database import get_session_factory
 from identity.repositories.token import (
     IRefreshTokenRepository,
     RefreshTokenRepository,
 )
 from identity.repositories.user import IUserRepository, UserRepository
+
+logger = get_logger(__name__)
 
 
 class IIdentityUnitOfWork(Protocol):
@@ -44,11 +47,13 @@ class IdentityUnitOfWork(IIdentityUnitOfWork):
 
     async def __aenter__(self) -> 'IdentityUnitOfWork':
         if self._session is not None:
+            logger.error('Identity unit of work entered while already active')
             raise RuntimeError('IdentityUnitOfWork context is already active')
 
         self._session = self._session_factory()
         self._user_repository = UserRepository(self._session)
         self._token_repository = RefreshTokenRepository(self._session)
+        logger.debug('Identity unit of work started')
         return self
 
     async def __aexit__(
@@ -60,6 +65,10 @@ class IdentityUnitOfWork(IIdentityUnitOfWork):
         session = self._require_session()
         try:
             if exc_type is not None:
+                logger.warning(
+                    'Identity unit of work rolling back after %s',
+                    exc_type.__name__,
+                )
                 await session.rollback()
         finally:
             try:
@@ -68,12 +77,15 @@ class IdentityUnitOfWork(IIdentityUnitOfWork):
                 self._session = None
                 self._user_repository = None
                 self._token_repository = None
+                logger.debug('Identity unit of work closed')
 
     async def commit(self) -> None:
         await self._require_session().commit()
+        logger.debug('Identity unit of work committed')
 
     async def rollback(self) -> None:
         await self._require_session().rollback()
+        logger.debug('Identity unit of work rolled back')
 
     @property
     def user_repository(self) -> IUserRepository:
