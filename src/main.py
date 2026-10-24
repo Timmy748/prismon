@@ -9,7 +9,7 @@ from agents.clients.project import (
 from agents.routes.chats import create_chat_routes
 from agents.routes.workflows import create_workflow_routes
 from agents.unit_of_work import create_agents_unit_of_work
-from core.logs import setup_log
+from core.logs import get_logger, setup_log
 from identity.routes.auth import create_auth_router
 from identity.routes.user import create_user_router
 from identity.security.jwt import create_token_provider
@@ -24,6 +24,7 @@ from project.storage import create_storage
 from project.unit_of_work import create_project_unit_of_work
 
 setup_log()
+logger = get_logger(__name__)
 
 app = FastAPI(title='Prismon API')
 app.include_router(
@@ -74,3 +75,5 @@ app.include_router(
         create_identity_unit_of_work,
     )
 )
+
+logger.info('Application routes configured')

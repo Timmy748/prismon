@@ -7,7 +7,8 @@ from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
     OTLPLogExporter,
 )
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.instrumentation.logging.handler import LoggingHandler
+from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import Resource
 
@@ -45,7 +46,7 @@ def setup_log() -> None:
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.INFO)
         root_logger.addHandler(
-            LoggingHandler(level=logging.NOTSET, logger_provider=provider)
+            LoggingHandler(level=logging.INFO, logger_provider=provider)
         )
         _configured.set()
 
