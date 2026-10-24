@@ -4,6 +4,7 @@ from http import HTTPStatus
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from core.logs import get_logger
 from identity.dtos.user import (
     CreateUserDTO,
     UpdateUserDTO,
@@ -31,6 +32,8 @@ from identity.use_cases.user import (
     get_user_by_id,
     update_user,
 )
+
+logger = get_logger(__name__)
 
 
 def create_user_router(
@@ -75,6 +78,7 @@ def create_user_router(
                     ),
                 )
         except IdentityException as error:
+            logger.warning('User creation rejected: %s', type(error).__name__)
             return handle_identity_error(error)
 
     @router.get('/{user_id}', response_model=UserSchema)
@@ -85,6 +89,7 @@ def create_user_router(
             async with unit_of_work_factory() as uow:
                 return await get_user_by_id(uow, user_id)
         except IdentityException as error:
+            logger.warning('User lookup rejected: %s', type(error).__name__)
             return handle_identity_error(error)
 
     @router.put('', response_model=UserSchema)
@@ -101,6 +106,7 @@ def create_user_router(
                     UpdateUserDTO(username=data.username, email=data.email),
                 )
         except IdentityException as error:
+            logger.warning('User update rejected: %s', type(error).__name__)
             return handle_identity_error(error)
 
     @router.patch('/change-password', response_model=UserSchema)
@@ -121,6 +127,7 @@ def create_user_router(
                     ),
                 )
         except IdentityException as error:
+            logger.warning('Password change rejected: %s', type(error).__name__)
             return handle_identity_error(error)
 
     return router
