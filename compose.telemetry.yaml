@@ -1,0 +1,37 @@
+services:
+  loki:
+    image: grafana/loki:3.5.0
+    command: ["-config.file=/etc/loki/config.yaml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+      - ./telemetry/loki-config.yaml:/etc/loki/config.yaml:ro
+
+  otel_collector:
+    image: otel/opentelemetry-collector-contrib:0.137.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    depends_on:
+      - loki
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./telemetry/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+
+  grafana:
+    image: grafana/grafana:latest
+    depends_on:
+      - loki
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./telemetry/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/loki.yaml:ro
+
+volumes:
+  loki_data:
+  grafana_data:

@@ -8,13 +8,20 @@ from agents.workflows.registry import (
     WorkflowRegistry,
     workflow_registry_factory,
 )
+from core.logs import get_logger, setup_log
+
+logger = get_logger(__name__)
 
 
 async def seed_workflows(registry: WorkflowRegistry | None = None) -> None:
+    logger.info('Starting workflow seed')
     session_factory = get_session_factory()
     if registry is None:
         registry = workflow_registry_factory()
 
+    created_count = 0
+    updated_count = 0
+    unchanged_count = 0
     async with session_factory() as session:
         existing_workflows = {
             workflow.name: workflow
@@ -31,6 +38,10 @@ async def seed_workflows(registry: WorkflowRegistry | None = None) -> None:
                         version=workflow_class.version,
                     )
                 )
+                created_count += 1
+                logger.info(
+                    'Created workflow during seed: %s', workflow_class.name
+                )
                 continue
 
             if (
@@ -39,12 +50,30 @@ async def seed_workflows(registry: WorkflowRegistry | None = None) -> None:
             ):
                 workflow.description = workflow_class.description
                 workflow.version = workflow_class.version
+                updated_count += 1
+                logger.info(
+                    'Updated workflow metadata during seed: %s',
+                    workflow_class.name,
+                )
+            else:
+                unchanged_count += 1
 
         await session.commit()
+        logger.info(
+            'Workflow seed completed: created=%d updated=%d unchanged=%d',
+            created_count,
+            updated_count,
+            unchanged_count,
+        )
 
 
 def main() -> None:  # pragma: no cover
-    asyncio.run(seed_workflows())
+    setup_log()
+    try:
+        asyncio.run(seed_workflows())
+    except Exception:
+        logger.exception('Workflow seed failed')
+        raise
 
 
 if __name__ == '__main__':

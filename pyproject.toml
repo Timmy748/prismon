@@ -18,6 +18,9 @@ dependencies = [
   "langchain>=1.4.6",
   "langchain-ollama>=1.0.0",
   "langgraph>=1.2.16",
+  "opentelemetry-sdk>=1.39.0",
+  "opentelemetry-exporter-otlp-proto-grpc>=1.39.0",
+  "opentelemetry-instrumentation-logging>=0.60b0",
 ]
 
 [tool.ruff]
@@ -63,8 +66,7 @@ asyncio_default_fixture_loop_scope = 'function'
 
 [tool.coverage.run]
 omit = [
-  '*/project/tests/*',
-  '*/agents/tests/*',
+  '*/tests/*',
   '*/agents/migrations/*',
   '*/main.py',
 ]
