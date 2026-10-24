@@ -4,9 +4,12 @@ from typing import Protocol
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.logs import get_logger
 from project.dtos.asset import AssetDTO
 from project.dtos.page import CursorPage, PaginationDTO
 from project.entities.asset import Asset, AssetStatus
+
+logger = get_logger(__name__)
 
 
 class IAssetRepository(Protocol):
@@ -54,6 +57,7 @@ class AssetRepository:
         )
 
     async def get_asset(self, asset_id: int) -> AssetDTO | None:
+        logger.debug('Loading asset repository record: asset_id=%s', asset_id)
         row = await self._session.get(Asset, asset_id)
         return self._to_dto(row) if row else None
 
@@ -64,6 +68,9 @@ class AssetRepository:
         asset_type: str | None = None,
         status: AssetStatus | None = None,
     ) -> CursorPage[AssetDTO]:
+        logger.debug(
+            'Listing asset repository records: project_id=%s', project_id
+        )
         limit = max(1, min(pagination.limit, 100))
         stmt = select(Asset).where(Asset.project_id == project_id)
         if pagination.cursor is not None:
@@ -104,6 +111,9 @@ class AssetRepository:
         description: str | None = None,
         status: AssetStatus = AssetStatus.ACTIVE,
     ) -> AssetDTO:
+        logger.debug(
+            'Creating asset repository record: project_id=%s', project_id
+        )
         row = Asset(
             project_id=project_id,
             file=file,
@@ -124,6 +134,7 @@ class AssetRepository:
         description: str | None = None,
         status: AssetStatus | None = None,
     ) -> AssetDTO | None:
+        logger.debug('Updating asset repository record: asset_id=%s', asset_id)
         row = await self._session.get(Asset, asset_id)
         if row is None:
             return None
@@ -140,6 +151,7 @@ class AssetRepository:
         return self._to_dto(row)
 
     async def delete_asset(self, asset_id: int) -> None:
+        logger.debug('Deleting asset repository record: asset_id=%s', asset_id)
         row = await self._session.get(Asset, asset_id)
         if row is None:
             return

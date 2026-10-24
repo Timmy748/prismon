@@ -1,6 +1,7 @@
 # ruff: noqa: PLR0913, PLR0917
 from uuid import uuid4
 
+from core.logs import get_logger
 from project.dtos.document import (
     ApproveDocumentDTO,
     CreateDocumentDTO,
@@ -19,6 +20,8 @@ from project.exceptions import (
 from project.permissions import ProjectPermission, has_permission
 from project.storage import IStorage
 from project.unit_of_work import IProjectUnitOfWork
+
+logger = get_logger(__name__)
 
 
 async def _get_member(uow: IProjectUnitOfWork, project_id: int, user_id: int):
@@ -67,9 +70,13 @@ async def get_documents(
         ProjectPermission.DOCUMENT_READ,
     )
     del storage  # Listing returns metadata; file contents remain in storage.
-    return await uow.document_repository.get_documents(
+    page = await uow.document_repository.get_documents(
         project_id, pagination, name, status
     )
+    logger.debug(
+        'Documents loaded: project_id=%s count=%s', project_id, len(page.items)
+    )
+    return page
 
 
 async def add_document(
@@ -98,8 +105,10 @@ async def add_document(
             project_id, key, data.name, data.description, status
         )
         await uow.commit()
+        logger.info('Document created: project_id=%s', project_id)
         return document
     except Exception:
+        logger.exception('Document creation failed: project_id=%s', project_id)
         storage.delete(key)
         raise
 
@@ -135,7 +144,17 @@ async def update_document(
         if updated is None:
             raise DocumentNotFoundException(document_id)
         await uow.commit()
+        logger.info(
+            'Document updated: project_id=%s document_id=%s',
+            project_id,
+            document_id,
+        )
     except Exception:
+        logger.exception(
+            'Document update failed: project_id=%s document_id=%s',
+            project_id,
+            document_id,
+        )
         if new_key is not None:
             storage.delete(new_key)
         raise
@@ -163,6 +182,11 @@ async def delete_document(
     await uow.document_repository.delete_document(document_id)
     await uow.commit()
     storage.delete(document.file)
+    logger.info(
+        'Document deleted: project_id=%s document_id=%s',
+        project_id,
+        document_id,
+    )
 
 
 async def review_document(
@@ -192,4 +216,10 @@ async def review_document(
     if updated is None:
         raise DocumentNotFoundException(document_id)
     await uow.commit()
+    logger.info(
+        'Document review completed: project_id=%s document_id=%s accepted=%s',
+        project_id,
+        document_id,
+        data.accept,
+    )
     return updated

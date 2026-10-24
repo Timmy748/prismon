@@ -2,6 +2,7 @@ from http import HTTPStatus
 
 from fastapi.responses import JSONResponse
 
+from core.logs import get_logger
 from project.exceptions import (
     AssetNotFoundException,
     DocumentNotFoundException,
@@ -16,6 +17,8 @@ from project.exceptions import (
     ProjectUserNotFoundException,
     ProjectUserServiceException,
 )
+
+logger = get_logger(__name__)
 
 DOMAIN_ERROR_STATUS: dict[type[ProjectException], HTTPStatus] = {
     ProjectNotFoundException: HTTPStatus.NOT_FOUND,
@@ -34,4 +37,9 @@ DOMAIN_ERROR_STATUS: dict[type[ProjectException], HTTPStatus] = {
 
 def handle_project_error(error: ProjectException) -> JSONResponse:
     status = DOMAIN_ERROR_STATUS.get(type(error), HTTPStatus.BAD_REQUEST)
+    logger.warning(
+        'Project request failed: error_type=%s status=%s',
+        type(error).__name__,
+        status.value,
+    )
     return JSONResponse(status_code=status, content={'detail': str(error)})

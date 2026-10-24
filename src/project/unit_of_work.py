@@ -3,6 +3,7 @@ from typing import Protocol, Self
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.logs import get_logger
 from project.database import get_session_factory
 from project.repositories.asset import AssetRepository, IAssetRepository
 from project.repositories.document import (
@@ -11,6 +12,8 @@ from project.repositories.document import (
 )
 from project.repositories.member import IMemberRepository, MemberRepository
 from project.repositories.project import IProjectRepository, ProjectRepository
+
+logger = get_logger(__name__)
 
 
 class IProjectUnitOfWork(Protocol):
@@ -53,6 +56,7 @@ class UnitOfWork(IProjectUnitOfWork):
             raise RuntimeError('UnitOfWork context is already active')
 
         self._session = get_session_factory()()
+        logger.debug('Project unit of work opened')
         self._project_repository = ProjectRepository(self._session)
         self._member_repository = MemberRepository(self._session)
         self._document_repository = DocumentRepository(self._session)
@@ -72,6 +76,10 @@ class UnitOfWork(IProjectUnitOfWork):
         try:
             if exc_type is not None:
                 await session.rollback()
+                logger.warning(
+                    'Project unit of work rolled back: exception_type=%s',
+                    exc_type.__name__,
+                )
         finally:
             self._session = None
             self._project_repository = None
@@ -79,12 +87,15 @@ class UnitOfWork(IProjectUnitOfWork):
             self._document_repository = None
             self._asset_repository = None
             await session.close()
+            logger.debug('Project unit of work closed')
 
     async def commit(self) -> None:
         await self._active_session().commit()
+        logger.debug('Project unit of work committed')
 
     async def rollback(self) -> None:
         await self._active_session().rollback()
+        logger.debug('Project unit of work rolled back explicitly')
 
     @property
     def project_repository(self) -> IProjectRepository:

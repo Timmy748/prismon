@@ -2,6 +2,7 @@
 
 from typing import Protocol
 
+from core.logs import get_logger
 from identity.exceptions import (
     IdentityException,
     InvalidCredentialsException,
@@ -19,6 +20,8 @@ from project.exceptions import (
     ProjectUserServiceException,
 )
 
+logger = get_logger(__name__)
+
 
 class IUserClient(Protocol):
     async def get_by_id(self, user_id: int) -> UserDTO: ...
@@ -35,8 +38,12 @@ class IdentityClient:
         try:
             user = await self._identity_api.get_by_id(user_id)
         except UserNotFoundException as error:
+            logger.info(
+                'Identity user lookup returned no user: user_id=%s', user_id
+            )
             raise ProjectUserNotFoundException(user_id) from error
         except IdentityException as error:
+            logger.exception('Identity user lookup failed: user_id=%s', user_id)
             raise ProjectUserServiceException() from error
         return UserDTO(id=user.id, username=user.username, email=user.email)
 
@@ -48,8 +55,10 @@ class IdentityClient:
             InvalidTokenException,
             TokenExpiredException,
         ) as error:
+            logger.warning('Identity rejected current user authentication')
             raise ProjectUserAuthenticationException() from error
         except IdentityException as error:
+            logger.exception('Identity current user lookup failed')
             raise ProjectUserServiceException() from error
         return UserDTO(id=user.id, username=user.username, email=user.email)
 

@@ -4,9 +4,12 @@ from typing import Protocol
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.logs import get_logger
 from project.dtos.member import MemberDTO
 from project.dtos.page import CursorPage, PaginationDTO
 from project.entities.member import Member, MemberRole, MemberStatus
+
+logger = get_logger(__name__)
 
 
 class IMemberRepository(Protocol):
@@ -51,6 +54,9 @@ class MemberRepository:
         )
 
     async def get_member(self, member_id: int) -> MemberDTO | None:
+        logger.debug(
+            'Loading member repository record: member_id=%s', member_id
+        )
         row = await self._session.get(Member, member_id)
         return self._dto(row) if row else None
 
@@ -62,6 +68,9 @@ class MemberRepository:
         role: MemberRole | None = None,
         status: MemberStatus | None = None,
     ) -> CursorPage[MemberDTO]:
+        logger.debug(
+            'Listing member repository records: project_id=%s', project_id
+        )
         limit = max(1, min(pagination.limit, 100))
         stmt = select(Member).where(Member.project_id == project_id)
         if pagination.cursor is not None:
@@ -103,6 +112,9 @@ class MemberRepository:
         role: MemberRole = MemberRole.MEMBER,
         status: MemberStatus = MemberStatus.PENDING,
     ) -> MemberDTO | None:
+        logger.debug(
+            'Creating member repository record: project_id=%s', project_id
+        )
         row = Member(
             project_id=project_id, user_id=user_id, role=role, status=status
         )
@@ -117,6 +129,9 @@ class MemberRepository:
         role: MemberRole | None = None,
         status: MemberStatus | None = None,
     ) -> MemberDTO | None:
+        logger.debug(
+            'Updating member repository record: member_id=%s', member_id
+        )
         row = await self._session.get(Member, member_id)
         if row is None:
             return None
@@ -129,6 +144,9 @@ class MemberRepository:
         return self._dto(row)
 
     async def delete_member(self, member_id: int) -> None:
+        logger.debug(
+            'Deleting member repository record: member_id=%s', member_id
+        )
         row = await self._session.get(Member, member_id)
         if row is None:
             return

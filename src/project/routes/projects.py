@@ -5,6 +5,7 @@ from http import HTTPStatus
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
+from core.logs import get_logger
 from project.clients.client_user import IUserClient
 from project.dtos.project import CreateProjectDTO, ProjectDTO, UpdateProjectDTO
 from project.exceptions import (
@@ -26,6 +27,8 @@ from project.use_cases.project import (
 )
 from project.utils.pagination import PageSchema, page_schema, pagination_dto
 
+logger = get_logger(__name__)
+
 
 def create_project_router(
     unit_of_work_factory: Callable[[], IProjectUnitOfWork],
@@ -46,6 +49,7 @@ def create_project_router(
         limit: int = Query(default=50, ge=1, le=100),
         cursor: str | None = None,
     ) -> PageSchema[ProjectSchema] | JSONResponse:
+        logger.info('Project route started: operation=list')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
@@ -55,7 +59,12 @@ def create_project_router(
                     name,
                     pagination_dto(cursor, limit),
                 )
-            return page_schema(page)
+            result = page_schema(page)
+            logger.info(
+                'Project route completed: operation=list item_count=%s',
+                len(page.items),
+            )
+            return result
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -66,14 +75,17 @@ def create_project_router(
         request: Request,
         data: CreateProjectSchema,
     ) -> ProjectDTO | JSONResponse:
+        logger.info('Project route started: operation=create')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
-                return await create_project(
+                project = await create_project(
                     unit_of_work,
                     user.id,
                     CreateProjectDTO(name=data.name, owner=str(user.id)),
                 )
+            logger.info('Project route completed: operation=create')
+            return project
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -83,15 +95,18 @@ def create_project_router(
         public_id: int,
         data: UpdateProjectSchema,
     ) -> ProjectDTO | JSONResponse:
+        logger.info('Project route started: operation=update')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
-                return await update_project(
+                project = await update_project(
                     unit_of_work,
                     public_id,
                     user.id,
                     UpdateProjectDTO(name=data.name),
                 )
+            logger.info('Project route completed: operation=update')
+            return project
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -102,6 +117,7 @@ def create_project_router(
         request: Request,
         public_id: int,
     ) -> JSONResponse | None:
+        logger.info('Project route started: operation=delete')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
@@ -110,6 +126,7 @@ def create_project_router(
                     public_id,
                     user.id,
                 )
+            logger.info('Project route completed: operation=delete')
             return None
         except ProjectException as error:
             return handle_project_error(error)

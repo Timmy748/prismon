@@ -4,9 +4,12 @@ from typing import Protocol
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.logs import get_logger
 from project.dtos.document import DocumentDTO
 from project.dtos.page import CursorPage, PaginationDTO
 from project.entities.document import Document, DocumentStatus
+
+logger = get_logger(__name__)
 
 
 class IDocumentRepository(Protocol):
@@ -54,6 +57,9 @@ class DocumentRepository:
         )
 
     async def get_document(self, document_id: int) -> DocumentDTO | None:
+        logger.debug(
+            'Loading document repository record: document_id=%s', document_id
+        )
         row = await self._session.get(Document, document_id)
         return self._to_dto(row) if row else None
 
@@ -64,6 +70,9 @@ class DocumentRepository:
         name: str | None = None,
         status: DocumentStatus | None = None,
     ) -> CursorPage[DocumentDTO]:
+        logger.debug(
+            'Listing document repository records: project_id=%s', project_id
+        )
         limit = max(1, min(pagination.limit, 100))
         stmt = select(Document).where(Document.project_id == project_id)
         if pagination.cursor is not None:
@@ -104,6 +113,9 @@ class DocumentRepository:
         description: str | None = None,
         status: DocumentStatus = DocumentStatus.DRAFT,
     ) -> DocumentDTO:
+        logger.debug(
+            'Creating document repository record: project_id=%s', project_id
+        )
         row = Document(
             project_id=project_id,
             file=file,
@@ -124,6 +136,9 @@ class DocumentRepository:
         description: str | None = None,
         status: DocumentStatus | None = None,
     ) -> DocumentDTO | None:
+        logger.debug(
+            'Updating document repository record: document_id=%s', document_id
+        )
         row = await self._session.get(Document, document_id)
         if row is None:
             return None
@@ -140,6 +155,9 @@ class DocumentRepository:
         return self._to_dto(row)
 
     async def delete_document(self, document_id: int) -> None:
+        logger.debug(
+            'Deleting document repository record: document_id=%s', document_id
+        )
         row = await self._session.get(Document, document_id)
         if row is None:
             return

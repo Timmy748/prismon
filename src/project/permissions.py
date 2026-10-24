@@ -1,7 +1,10 @@
 from enum import Enum
 from typing import Protocol
 
+from core.logs import get_logger
 from project.entities.member import MemberRole
+
+logger = get_logger(__name__)
 
 
 class ProjectPermission(str, Enum):
@@ -61,4 +64,11 @@ _ROLE_PERMISSIONS: dict[MemberRole, frozenset[ProjectPermission]] = {
 
 
 def has_permission(role: MemberRole, permission: ProjectPermission) -> bool:
-    return permission in _ROLE_PERMISSIONS[role]
+    allowed = permission in _ROLE_PERMISSIONS[role]
+    if not allowed:
+        logger.debug(
+            'Project permission check denied: role=%s permission=%s',
+            role.value,
+            permission.value,
+        )
+    return allowed

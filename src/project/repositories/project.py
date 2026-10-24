@@ -4,10 +4,13 @@ from typing import Protocol
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.logs import get_logger
 from project.dtos.page import CursorPage, PaginationDTO
 from project.dtos.project import ProjectDTO
 from project.entities.member import Member, MemberStatus
 from project.entities.project import Project
+
+logger = get_logger(__name__)
 
 
 class IProjectRepository(Protocol):
@@ -38,6 +41,9 @@ class ProjectRepository:
         )
 
     async def get_project(self, project_id: int) -> ProjectDTO | None:
+        logger.debug(
+            'Loading project repository record: project_id=%s', project_id
+        )
         row = await self._session.get(Project, project_id)
         return self._to_dto(row) if row else None
 
@@ -47,6 +53,7 @@ class ProjectRepository:
         name: str | None = None,
         pagination: PaginationDTO = PaginationDTO(),
     ) -> CursorPage[ProjectDTO]:
+        logger.debug('Listing project repository records: user_id=%s', user_id)
         limit = max(1, min(pagination.limit, 100))
         stmt = (
             select(Project)
@@ -84,6 +91,9 @@ class ProjectRepository:
         )
 
     async def create_project(self, name: str, owner_id: int) -> ProjectDTO:
+        logger.debug(
+            'Creating project repository record: owner_id=%s', owner_id
+        )
         row = Project(name=name, owner_id=owner_id)
         self._session.add(row)
         await self._session.flush()
@@ -96,6 +106,9 @@ class ProjectRepository:
         name: str | None = None,
         owner_id: int | None = None,
     ) -> ProjectDTO | None:
+        logger.debug(
+            'Updating project repository record: project_id=%s', project_id
+        )
         row = await self._session.get(Project, project_id)
         if row is None:
             return None
@@ -108,6 +121,9 @@ class ProjectRepository:
         return self._to_dto(row)
 
     async def delete_project(self, project_id: int) -> None:
+        logger.debug(
+            'Deleting project repository record: project_id=%s', project_id
+        )
         row = await self._session.get(Project, project_id)
         if row is None:
             return
