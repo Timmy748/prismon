@@ -45,7 +45,7 @@ def workflow_stub(monkeypatch):
         Mock(return_value=registry),
     )
     monkeypatch.setattr(
-        chat_use_cases, 'OllamaEngine', Mock(return_value=engine)
+        chat_use_cases, 'create_llm_engine', Mock(return_value=engine)
     )
     return SimpleNamespace(
         generated=generated,
@@ -78,6 +78,6 @@ def chat_workflow_engine(monkeypatch):
 
     engine.stream = Mock(side_effect=stream)
     monkeypatch.setattr(
-        chat_use_cases, 'OllamaEngine', Mock(return_value=engine)
+        chat_use_cases, 'create_llm_engine', Mock(return_value=engine)
     )
     return engine

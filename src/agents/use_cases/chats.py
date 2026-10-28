@@ -22,7 +22,7 @@ from agents.exceptions import (
     MultipleSubmitError,
 )
 from agents.llm_engine.base import GenerationChunk, GenerationFinal
-from agents.llm_engine.ollama import OllamaEngine
+from agents.llm_engine.factory import create_llm_engine
 from agents.unit_of_work import IAgentsUnitOfWork
 from agents.workflows.registry import workflow_registry_factory
 from core.logs import get_logger
@@ -136,7 +136,7 @@ async def send_message(
         raise MultipleSubmitError()
 
     workflow = workflow_registry_factory().get_workflow(
-        'chat', engine=OllamaEngine()
+        'chat', engine=create_llm_engine()
     )
     await uow.message_repository.create_human_message(chat_id, message.text)
     history = await uow.message_repository.get_messages_by_chat(
