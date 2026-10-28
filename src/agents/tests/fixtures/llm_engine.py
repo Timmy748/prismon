@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk
-from langchain_core.runnables import RunnableLambda
 
 from agents.dtos.message import MessageDTO
 from agents.entities.message import SenderType
@@ -106,7 +105,9 @@ def mock_ollama_llm():
         ),
         'parsing_error': None,
     }
-    structured_llm = RunnableLambda(lambda _: structured_result)
+    structured_llm = SimpleNamespace(
+        ainvoke=AsyncMock(return_value=structured_result)
+    )
     llm.with_structured_output = MagicMock(return_value=structured_llm)
     return SimpleNamespace(
         llm=llm,

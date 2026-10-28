@@ -16,6 +16,7 @@ dependencies = [
   "alembic>=1.20.0",
   "psycopg[binary]>=3.3.6",
   "langchain>=1.4.6",
+  "langchain-openrouter>=0.2.8",
   "langchain-ollama>=1.0.0",
   "langgraph>=1.2.16",
   "opentelemetry-sdk>=1.39.0",

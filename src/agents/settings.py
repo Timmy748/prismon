@@ -1,6 +1,7 @@
 from dataclasses import field
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,10 @@ class Settings(BaseSettings):  # pragma: no cover
     OLLAMA_BASE_URL: str = 'http://ollama:11434'
     OLLAMA_MODEL: str = 'bonsai-2:4b'
     OLLAMA_TEMPERATURE: float = 0.0
+    LLM_PROVIDER: str = 'ollama'
+    OPENROUTER_API_KEY: SecretStr = SecretStr('')
+    OPENROUTER_MODEL: str = ''
+    OPENROUTER_TEMPERATURE: float = 0.0
 
 
 @lru_cache
