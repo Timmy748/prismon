@@ -77,6 +77,49 @@ async def get_assets(
     return page
 
 
+async def _get_asset_for_read(
+    uow: IProjectUnitOfWork,
+    project_id: int,
+    user_id: int,
+    asset_id: int,
+) -> AssetDTO:
+    await _authorize_asset_access(
+        uow,
+        project_id,
+        user_id,
+        ProjectPermission.ASSET_READ,
+    )
+    asset = await uow.asset_repository.get_asset(asset_id)
+    if asset is None or asset.project_id != project_id:
+        raise AssetNotFoundException(asset_id)
+    return asset
+
+
+async def get_asset_file_url(
+    uow: IProjectUnitOfWork,
+    storage: IStorage,
+    project_id: int,
+    user_id: int,
+    asset_id: int,
+) -> str:
+    asset = await _get_asset_for_read(uow, project_id, user_id, asset_id)
+    return await storage.get_presigned_url(asset.file)
+
+
+async def download_asset(
+    uow: IProjectUnitOfWork,
+    storage: IStorage,
+    project_id: int,
+    user_id: int,
+    asset_id: int,
+) -> str:
+    asset = await _get_asset_for_read(uow, project_id, user_id, asset_id)
+    filename = f'asset-{asset.id}'
+    return await storage.get_presigned_url(
+        asset.file, download_filename=filename
+    )
+
+
 async def add_asset(
     uow: IProjectUnitOfWork,
     storage: IStorage,
@@ -84,6 +127,7 @@ async def add_asset(
     user_id: int,
     data: CreateAssetDTO,
     content: bytes,
+    content_type: str | None = None,
 ) -> AssetDTO:
     member = await _authorize_asset_access(
         uow,
@@ -92,7 +136,7 @@ async def add_asset(
         ProjectPermission.ASSET_CREATE,
     )
     key = f'projects/{project_id}/assets/{uuid4().hex}'
-    storage.save(key, content)
+    await storage.save(key, content, content_type)
     status = (
         AssetStatus.ACTIVE
         if has_permission(member.role, ProjectPermission.ASSET_APPROVE)
@@ -111,7 +155,7 @@ async def add_asset(
         return asset
     except Exception:
         logger.exception('Asset creation failed: project_id=%s', project_id)
-        storage.delete(key)
+        await storage.delete(key)
         raise
 
 
@@ -123,6 +167,7 @@ async def update_asset(
     asset_id: int,
     data: UpdateAssetDTO,
     content: bytes | None = None,
+    content_type: str | None = None,
 ) -> AssetDTO:
     await _authorize_asset_access(
         uow,
@@ -136,7 +181,7 @@ async def update_asset(
     new_key = asset.file
     if content is not None:
         new_key = f'projects/{project_id}/assets/{uuid4().hex}'
-        storage.save(new_key, content)
+        await storage.save(new_key, content, content_type)
     try:
         updated = await uow.asset_repository.update_asset(
             asset_id,
@@ -157,10 +202,10 @@ async def update_asset(
             asset_id,
         )
         if content is not None:
-            storage.delete(new_key)
+            await storage.delete(new_key)
         raise
     if content is not None:
-        storage.delete(asset.file)
+        await storage.delete(asset.file)
     return updated
 
 
@@ -182,7 +227,7 @@ async def delete_asset(
         raise AssetNotFoundException(asset_id)
     await uow.asset_repository.delete_asset(asset_id)
     await uow.commit()
-    storage.delete(asset.file)
+    await storage.delete(asset.file)
     logger.info(
         'Asset deleted: project_id=%s asset_id=%s', project_id, asset_id
     )

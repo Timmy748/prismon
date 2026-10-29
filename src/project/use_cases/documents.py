@@ -79,6 +79,59 @@ async def get_documents(
     return page
 
 
+async def _get_document_for_read(
+    uow: IProjectUnitOfWork,
+    project_id: int,
+    user_id: int,
+    document_id: int,
+) -> DocumentDTO:
+    await _authorize(
+        uow,
+        project_id,
+        user_id,
+        ProjectPermission.DOCUMENT_READ,
+    )
+    document = await uow.document_repository.get_document(document_id)
+    if document is None or document.project_id != project_id:
+        raise DocumentNotFoundException(document_id)
+    return document
+
+
+async def get_document_file_url(
+    uow: IProjectUnitOfWork,
+    storage: IStorage,
+    project_id: int,
+    user_id: int,
+    document_id: int,
+) -> str:
+    document = await _get_document_for_read(
+        uow, project_id, user_id, document_id
+    )
+    return await storage.get_presigned_url(document.file)
+
+
+async def download_document(
+    uow: IProjectUnitOfWork,
+    storage: IStorage,
+    project_id: int,
+    user_id: int,
+    document_id: int,
+) -> str:
+    document = await _get_document_for_read(
+        uow, project_id, user_id, document_id
+    )
+    filename = (
+        document.name.replace('/', '_')
+        .replace('\\', '_')
+        .replace('\r', '')
+        .replace('\n', '')
+        or f'document-{document.id}'
+    )
+    return await storage.get_presigned_url(
+        document.file, download_filename=filename
+    )
+
+
 async def add_document(
     uow: IProjectUnitOfWork,
     storage: IStorage,
@@ -86,6 +139,7 @@ async def add_document(
     user_id: int,
     data: CreateDocumentDTO,
     content: bytes,
+    content_type: str | None = None,
 ) -> DocumentDTO:
     member = await _authorize(
         uow,
@@ -94,7 +148,7 @@ async def add_document(
         ProjectPermission.DOCUMENT_CREATE,
     )
     key = _new_storage_key(project_id)
-    storage.save(key, content)
+    await storage.save(key, content, content_type)
     status = (
         DocumentStatus.PUBLISHED
         if has_permission(member.role, ProjectPermission.DOCUMENT_APPROVE)
@@ -109,7 +163,7 @@ async def add_document(
         return document
     except Exception:
         logger.exception('Document creation failed: project_id=%s', project_id)
-        storage.delete(key)
+        await storage.delete(key)
         raise
 
 
@@ -121,6 +175,7 @@ async def update_document(
     document_id: int,
     data: UpdateDocumentDTO,
     content: bytes | None = None,
+    content_type: str | None = None,
 ) -> DocumentDTO:
     await _authorize(
         uow,
@@ -133,7 +188,7 @@ async def update_document(
         raise DocumentNotFoundException(document_id)
     new_key = _new_storage_key(project_id) if content is not None else None
     if new_key is not None:
-        storage.save(new_key, content)
+        await storage.save(new_key, content, content_type)
     try:
         updated = await uow.document_repository.update_document(
             document_id,
@@ -156,10 +211,10 @@ async def update_document(
             document_id,
         )
         if new_key is not None:
-            storage.delete(new_key)
+            await storage.delete(new_key)
         raise
     if new_key is not None:
-        storage.delete(document.file)
+        await storage.delete(document.file)
     return updated
 
 
@@ -181,7 +236,7 @@ async def delete_document(
         raise DocumentNotFoundException(document_id)
     await uow.document_repository.delete_document(document_id)
     await uow.commit()
-    storage.delete(document.file)
+    await storage.delete(document.file)
     logger.info(
         'Document deleted: project_id=%s document_id=%s',
         project_id,

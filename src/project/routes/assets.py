@@ -1,9 +1,9 @@
-# ruff: noqa: PLR0913, PLR0917
+# ruff: noqa: PLR0913, PLR0915, PLR0917
 from collections.abc import Callable
 from http import HTTPStatus
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 
 from core.logs import get_logger
 from project.clients.client_user import IUserClient
@@ -21,6 +21,8 @@ from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.assets import (
     add_asset,
     delete_asset,
+    download_asset,
+    get_asset_file_url,
     get_assets,
     update_asset,
 )
@@ -103,6 +105,7 @@ def create_assets_router(
                         description=description or '',
                     ),
                     await file.read(),
+                    file.content_type,
                 )
             result = AssetSchema.from_dto(dto)
             logger.info('Asset route completed: operation=create')
@@ -131,6 +134,7 @@ def create_assets_router(
                     asset_id,
                     UpdateAssetDTO(type=type, description=description),
                     await file.read() if file is not None else None,
+                    file.content_type if file is not None else None,
                 )
             result = AssetSchema.from_dto(dto)
             logger.info('Asset route completed: operation=update')
@@ -157,6 +161,54 @@ def create_assets_router(
                 )
             logger.info('Asset route completed: operation=delete')
             return Response(status_code=HTTPStatus.NO_CONTENT)
+        except ProjectException as error:
+            return handle_project_error(error)
+
+    @router.get('/{asset_id}/file')
+    async def redirect_asset_file(
+        request: Request,
+        project_id: int,
+        asset_id: int,
+    ):
+        logger.info('Asset route started: operation=file')
+        try:
+            user = await resolve_current_user(request.cookies)
+            async with unit_of_work_factory() as unit_of_work:
+                url = await get_asset_file_url(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    asset_id,
+                )
+            logger.info('Asset route completed: operation=file')
+            return RedirectResponse(
+                url=url, status_code=HTTPStatus.TEMPORARY_REDIRECT
+            )
+        except ProjectException as error:
+            return handle_project_error(error)
+
+    @router.get('/{asset_id}/download')
+    async def redirect_asset_download(
+        request: Request,
+        project_id: int,
+        asset_id: int,
+    ):
+        logger.info('Asset route started: operation=download')
+        try:
+            user = await resolve_current_user(request.cookies)
+            async with unit_of_work_factory() as unit_of_work:
+                url = await download_asset(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    asset_id,
+                )
+            logger.info('Asset route completed: operation=download')
+            return RedirectResponse(
+                url=url, status_code=HTTPStatus.TEMPORARY_REDIRECT
+            )
         except ProjectException as error:
             return handle_project_error(error)
 

@@ -34,6 +34,62 @@ async def test_assets_require_authentication(asset_client):
 
 
 @pytest.mark.asyncio
+async def test_asset_file_route_redirects_to_signed_url(
+    asset_client, asset_api
+):
+    asset_api[5].get_presigned_url.return_value = 'https://rustfs.test/view'
+
+    response = await asset_client.get(
+        '/projects/2/assets/4/file', cookies={'jwt': 'token'}
+    )
+
+    assert response.status_code == HTTPStatus.TEMPORARY_REDIRECT
+    assert response.headers['location'] == 'https://rustfs.test/view'
+    asset_api[5].get_presigned_url.assert_awaited_once_with(
+        'projects/2/assets/file'
+    )
+
+
+@pytest.mark.asyncio
+async def test_asset_download_route_redirects_to_attachment_url(
+    asset_client, asset_api
+):
+    asset_api[5].get_presigned_url.return_value = 'https://rustfs.test/download'
+
+    response = await asset_client.get(
+        '/projects/2/assets/4/download', cookies={'jwt': 'token'}
+    )
+
+    assert response.status_code == HTTPStatus.TEMPORARY_REDIRECT
+    assert response.headers['location'] == 'https://rustfs.test/download'
+    asset_api[5].get_presigned_url.assert_awaited_once_with(
+        'projects/2/assets/file', download_filename='asset-4'
+    )
+
+
+@pytest.mark.asyncio
+async def test_asset_file_route_requires_authentication(
+    asset_client, asset_api
+):
+    response = await asset_client.get('/projects/2/assets/4/file')
+
+    assert response.status_code == HTTPStatus.UNAUTHORIZED
+    asset_api[5].get_presigned_url.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_asset_download_route_maps_missing_asset(asset_client, asset_api):
+    asset_api[3].get_asset.return_value = None
+
+    response = await asset_client.get(
+        '/projects/2/assets/404/download', cookies={'jwt': 'token'}
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    asset_api[5].get_presigned_url.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_user_client_authentication_error_is_translated(
     asset_client, asset_api
 ):
@@ -85,7 +141,7 @@ async def test_upload_asset_multipart(asset_client, asset_api):
     )
     assert response.status_code == HTTPStatus.CREATED
     assert response.json()['id'] == 4
-    asset_api[5].save.assert_called_once()
+    asset_api[5].save.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -120,7 +176,7 @@ async def test_update_asset_without_file(asset_client, asset_api):
         data={'type': 'photo'},
     )
     assert response.status_code == HTTPStatus.OK
-    asset_api[5].save.assert_not_called()
+    asset_api[5].save.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -165,7 +221,7 @@ async def test_delete_asset(asset_client, asset_api):
     )
     assert response.status_code == HTTPStatus.NO_CONTENT
     asset_api[3].delete_asset.assert_awaited_once_with(4)
-    asset_api[5].delete.assert_called_once_with('projects/2/assets/file')
+    asset_api[5].delete.assert_awaited_once_with('projects/2/assets/file')
 
 
 @pytest.mark.asyncio

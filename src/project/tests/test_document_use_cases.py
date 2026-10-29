@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -11,7 +10,6 @@ from project.dtos.document import (
 )
 from project.dtos.member import MemberDTO
 from project.dtos.page import CursorPage, PaginationDTO
-from project.dtos.project import ProjectDTO
 from project.entities.document import DocumentStatus
 from project.entities.member import MemberRole, MemberStatus
 from project.exceptions import (
@@ -24,56 +22,12 @@ from project.tests.fixtures.mock import make_unit_of_work
 from project.use_cases.documents import (
     add_document,
     delete_document,
+    download_document,
+    get_document_file_url,
     get_documents,
     review_document,
     update_document,
 )
-
-
-class MemoryStorage:
-    def __init__(self):
-        self.files: dict[str, bytes] = {}
-        self.deleted: list[str] = []
-
-    def save(self, key: str, content: bytes | None) -> None:
-        if content is None:
-            return
-        self.files[key] = content
-
-    def retrieve(self, key: str) -> bytes | None:
-        return self.files.get(key)
-
-    def delete(self, key: str) -> None:
-        self.deleted.append(key)
-        self.files.pop(key, None)
-
-
-@pytest.fixture
-def storage():
-    return MemoryStorage()
-
-
-@pytest.fixture
-def repos():
-    now = datetime.now(timezone.utc)
-    project = ProjectDTO(1, 'Project', 10, now, now)
-    owner = MemberDTO(1, 1, MemberRole.OWNER, MemberStatus.ACTIVE, 10, now, now)
-    member = MemberDTO(
-        2, 1, MemberRole.MEMBER, MemberStatus.ACTIVE, 20, now, now
-    )
-    project_repo = AsyncMock()
-    member_repo = AsyncMock()
-    document_repo = AsyncMock()
-    project_repo.get_project.return_value = project
-
-    async def get_members(project_id, **kwargs):
-        return CursorPage(
-            [owner if kwargs.get('user_id') == owner.user_id else member],
-            PaginationDTO(),
-        )
-
-    member_repo.get_members.side_effect = get_members
-    return project_repo, member_repo, document_repo
 
 
 def _doc(file='old-key', status=DocumentStatus.PENDING, project_id=1):
@@ -104,6 +58,51 @@ async def test_get_documents_authorizes_member_and_forwards_filters(
     document_repo.get_documents.assert_awaited_once_with(
         1, PaginationDTO(limit=7), 'brief', DocumentStatus.PENDING
     )
+
+
+@pytest.mark.asyncio
+async def test_get_document_file_url_returns_signed_url(repos, storage):
+    project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
+    document_repo.get_document.return_value = _doc(file='document-key')
+
+    result = await get_document_file_url(unit_of_work, storage, 1, 20, 4)
+
+    assert result == 'https://rustfs.test/signed-view'
+    assert storage.presigned == [('document-key', None)]
+
+
+@pytest.mark.asyncio
+async def test_download_document_returns_attachment_url(repos, storage):
+    project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
+    document_repo.get_document.return_value = _doc(file='document-key')
+
+    result = await download_document(unit_of_work, storage, 1, 20, 4)
+
+    assert result == 'https://rustfs.test/signed-download'
+    assert storage.presigned == [('document-key', 'Brief')]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('document_state', ['missing', 'foreign_project'])
+async def test_document_file_url_rejects_missing_or_foreign_document(
+    repos, storage, document_state
+):
+    project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
+    document_repo.get_document.return_value = (
+        None if document_state == 'missing' else _doc(project_id=2)
+    )
+
+    with pytest.raises(DocumentNotFoundException):
+        await get_document_file_url(unit_of_work, storage, 1, 20, 4)
 
 
 @pytest.mark.asyncio
@@ -158,10 +157,12 @@ async def test_add_document_saves_bytes_and_sets_member_pending(repos, storage):
         20,
         CreateDocumentDTO('ignored', 'Brief', 'Description'),
         b'body',
+        'application/pdf',
     )
     key = document_repo.create_document.await_args.args[1]
     assert key.startswith('projects/1/documents/')
-    assert storage.retrieve(key) == b'body'
+    assert storage.files[key] == b'body'
+    assert storage.saved == [(key, b'body', 'application/pdf')]
     document_repo.create_document.assert_awaited_once_with(
         1, key, 'Brief', 'Description', DocumentStatus.PENDING
     )
@@ -230,7 +231,7 @@ async def test_update_document_replaces_file_after_update(repos, storage):
     )
     new_key = document_repo.update_document.await_args.kwargs['file']
     assert result.file == 'new-key'
-    assert storage.retrieve(new_key) == b'new bytes'
+    assert storage.files[new_key] == b'new bytes'
     assert storage.deleted == ['old-key']
 
 
