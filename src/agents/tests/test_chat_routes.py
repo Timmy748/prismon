@@ -7,6 +7,7 @@ from inspect import signature
 
 import pytest
 from fastapi import HTTPException, Request
+from pydantic import ValidationError
 
 import agents.routes.chats as chat_routes
 from agents.dtos.chat import ChatDTO
@@ -14,7 +15,11 @@ from agents.dtos.message import MessageDTO
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.dtos.user import UserDTO
 from agents.entities.message import SenderType
-from agents.exceptions import ChatNotFoundException, UserAuthenticationException
+from agents.exceptions import (
+    ApiKeyNotFoundException,
+    ChatNotFoundException,
+    UserAuthenticationException,
+)
 from agents.routes.chats import create_chat_routes
 from agents.schemas.chat import UpdateChatTitleSchema
 from agents.schemas.message import CreateMessageSchema
@@ -248,12 +253,13 @@ async def test_post_message_to_existing_chat_streams_tokens_and_saved_message(
         lambda: project_client,
     )
     response, events = await _post_message_stream(
-        router, CreateMessageSchema(chat_id=3, text='hello')
+        router, CreateMessageSchema(chat_id=3, api_key_id=123, text='hello')
     )
 
     assert response.status_code == HTTPStatus.OK
     assert response.media_type == 'text/event-stream'
     assert response.headers['cache-control'] == 'no-cache'
+    project_client.get_api_key.assert_awaited_once_with(7, 11, 123)
     assert [name for name, _ in events] == ['token', 'token', 'done']
     assert [data for name, data in events if name == 'token'] == [
         'ans',
@@ -302,11 +308,15 @@ async def test_post_message_without_chat_streams_created_chat_event(
         lambda: project_client,
     )
     response, events = await _post_message_stream(
-        router, CreateMessageSchema(project_id=PROJECT_ID, text='hello')
+        router,
+        CreateMessageSchema(
+            project_id=PROJECT_ID, api_key_id=123, text='hello'
+        ),
     )
 
     assert response.status_code == HTTPStatus.OK
     assert [name for name, _ in events] == ['chat', 'token', 'token', 'done']
+    project_client.get_api_key.assert_awaited_once_with(7, 11, 123)
     assert events[0][1]['id'] == CHAT_ID
     assert events[0][1]['project_id'] == PROJECT_ID
 
@@ -340,7 +350,7 @@ async def test_post_message_streams_generation_error_as_sse(
     )
 
     response, events = await _post_message_stream(
-        router, CreateMessageSchema(chat_id=3, text='hello')
+        router, CreateMessageSchema(chat_id=3, api_key_id=123, text='hello')
     )
 
     assert response.status_code == HTTPStatus.OK
@@ -376,7 +386,7 @@ async def test_post_message_stream_converts_chat_dto_event(
     )
 
     response, events = await _post_message_stream(
-        router, CreateMessageSchema(chat_id=3, text='hello')
+        router, CreateMessageSchema(chat_id=3, api_key_id=123, text='hello')
     )
 
     assert response.status_code == HTTPStatus.OK
@@ -433,7 +443,7 @@ async def test_post_message_stream_converts_iteration_exception_to_sse(
     )
 
     response, events = await _post_message_stream(
-        router, CreateMessageSchema(chat_id=3, text='hello')
+        router, CreateMessageSchema(chat_id=3, api_key_id=123, text='hello')
     )
 
     assert response.status_code == HTTPStatus.OK
@@ -641,7 +651,7 @@ async def test_post_message_endpoint_maps_setup_error_directly(
 
     result = await _endpoint(router, '/chats/messages', 'POST')(
         _request({'jwt': 'token'}),
-        CreateMessageSchema(chat_id=CHAT_ID, text='x'),
+        CreateMessageSchema(chat_id=CHAT_ID, api_key_id=123, text='x'),
     )
 
     assert result.status_code == HTTPStatus.NOT_FOUND
@@ -660,7 +670,7 @@ async def test_post_message_maps_auth_error_before_opening_uow(
 
     response = await _endpoint(router, '/chats/messages', 'POST')(
         _request({'jwt': 'token'}),
-        CreateMessageSchema(chat_id=CHAT_ID, text='x'),
+        CreateMessageSchema(chat_id=CHAT_ID, api_key_id=123, text='x'),
     )
 
     assert response.status_code == HTTPStatus.UNAUTHORIZED
@@ -680,7 +690,7 @@ async def test_post_message_reraises_cancellation_before_opening_uow(
     with pytest.raises(asyncio.CancelledError):
         await _endpoint(router, '/chats/messages', 'POST')(
             _request({'jwt': 'token'}),
-            CreateMessageSchema(chat_id=CHAT_ID, text='x'),
+            CreateMessageSchema(chat_id=CHAT_ID, api_key_id=123, text='x'),
         )
 
 
@@ -707,7 +717,7 @@ async def test_post_message_stream_reraises_cancellation_and_closes_uow(
     endpoint = _endpoint(router, '/chats/messages', 'POST')
     response = await endpoint(
         _request({'jwt': 'token'}),
-        CreateMessageSchema(chat_id=CHAT_ID, text='x'),
+        CreateMessageSchema(chat_id=CHAT_ID, api_key_id=123, text='x'),
     )
 
     with pytest.raises(asyncio.CancelledError):
@@ -734,7 +744,7 @@ async def test_post_message_defensive_project_id_check(
         if route.path == '/chats/messages'
     )
     data = CreateMessageSchema.model_construct(
-        chat_id=None, project_id=None, text='hello'
+        chat_id=None, project_id=None, api_key_id=123, text='hello'
     )
 
     with pytest.raises(HTTPException, match='project_id is required'):
@@ -760,7 +770,7 @@ async def test_post_message_maps_permission_error(
     )
     response = await _endpoint(router, '/chats/messages', 'POST')(
         _request({'jwt': 'token'}),
-        CreateMessageSchema(chat_id=3, text='hello'),
+        CreateMessageSchema(chat_id=3, api_key_id=123, text='hello'),
     )
 
     assert response.status_code == HTTPStatus.FORBIDDEN
@@ -770,6 +780,49 @@ async def test_post_message_maps_permission_error(
             f'{ProjectPermission.CHAT_SEND_MESSAGE.value}'
         )
     }
+
+
+@pytest.mark.parametrize('api_key_id', [0, -1])
+def test_create_message_schema_rejects_non_positive_api_key_id(api_key_id):
+    with pytest.raises(ValidationError):
+        CreateMessageSchema(
+            chat_id=CHAT_ID,
+            api_key_id=api_key_id,
+            text='hello',
+        )
+
+
+def test_create_message_schema_requires_api_key_id():
+    with pytest.raises(ValidationError, match='api_key_id'):
+        CreateMessageSchema(chat_id=CHAT_ID, text='hello')
+
+
+@pytest.mark.asyncio
+async def test_post_message_maps_missing_api_key_to_not_found(
+    chat_repository,
+    message_repository,
+    identity_client,
+    project_client,
+):
+    chat_repository.get_chat.return_value = _chat()
+    project_client.has_permission.return_value = True
+    project_client.get_api_key.side_effect = ApiKeyNotFoundException(123)
+    identity_client.get_current_user.return_value = UserDTO(
+        11, 'ana', 'a@example.com'
+    )
+    router = create_chat_routes(
+        lambda: chat_repository,
+        lambda: identity_client,
+        lambda: project_client,
+    )
+
+    response = await _endpoint(router, '/chats/messages', 'POST')(
+        _request({'jwt': 'token'}),
+        CreateMessageSchema(chat_id=CHAT_ID, api_key_id=123, text='hello'),
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert json.loads(response.body) == {'detail': 'API key 123 not found'}
 
 
 @pytest.mark.asyncio

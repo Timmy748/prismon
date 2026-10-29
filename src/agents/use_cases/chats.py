@@ -23,6 +23,7 @@ from agents.exceptions import (
 )
 from agents.llm_engine.base import GenerationChunk, GenerationFinal
 from agents.llm_engine.factory import create_llm_engine
+from agents.settings import get_settings
 from agents.unit_of_work import IAgentsUnitOfWork
 from agents.workflows.registry import workflow_registry_factory
 from core.logs import get_logger
@@ -116,6 +117,7 @@ async def send_message(
     project_client: IProjectClient,
     chat_id: int,
     user_id: int,
+    api_key_id: int,
     message: CreateMessageDTO,
 ) -> AsyncIterator[dict[str, Any]]:
     if not message.text.strip():
@@ -135,8 +137,14 @@ async def send_message(
     if latest.items and latest.items[0].sender_type == SenderType.USER:
         raise MultipleSubmitError()
 
+    api_key = await project_client.get_api_key(
+        chat.project_id, user_id, api_key_id
+    )
     workflow = workflow_registry_factory().get_workflow(
-        'chat', engine=create_llm_engine()
+        'chat',
+        engine=create_llm_engine(
+            api_key=api_key, provider=get_settings().LLM_PROVIDER
+        ),
     )
     await uow.message_repository.create_human_message(chat_id, message.text)
     history = await uow.message_repository.get_messages_by_chat(

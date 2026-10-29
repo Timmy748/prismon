@@ -3,23 +3,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk
-from pydantic import SecretStr
 
 from agents.llm_engine.base import GenerationChunk, GenerationFinal
 from agents.llm_engine.openrouter import OpenRouterEngine
-from agents.settings import Settings
-
-
-def test_settings_parse_openrouter_key_as_secret():
-    settings = Settings.model_validate({'OPENROUTER_API_KEY': 'test-key'})
-
-    assert isinstance(settings.OPENROUTER_API_KEY, SecretStr)
-    assert settings.OPENROUTER_API_KEY.get_secret_value() == 'test-key'
 
 
 def test_constructor_configures_chat_openrouter(monkeypatch):
     settings = SimpleNamespace(
-        OPENROUTER_API_KEY=SecretStr('test-key'),
         OPENROUTER_MODEL='provider/model',
         OPENROUTER_TEMPERATURE=0.4,
     )
@@ -30,7 +20,7 @@ def test_constructor_configures_chat_openrouter(monkeypatch):
     )
     monkeypatch.setattr('agents.llm_engine.openrouter.ChatOpenRouter', factory)
 
-    engine = OpenRouterEngine()
+    engine = OpenRouterEngine(api_key='test-key')
 
     factory.assert_called_once_with(
         api_key='test-key',
@@ -44,7 +34,6 @@ def test_constructor_configures_chat_openrouter(monkeypatch):
 @pytest.mark.parametrize('api_key', ['', '   '])
 def test_constructor_rejects_missing_api_key(monkeypatch, api_key):
     settings = SimpleNamespace(
-        OPENROUTER_API_KEY=SecretStr(api_key),
         OPENROUTER_MODEL='provider/model',
         OPENROUTER_TEMPERATURE=0.4,
     )
@@ -53,13 +42,12 @@ def test_constructor_rejects_missing_api_key(monkeypatch, api_key):
         lambda: settings,
     )
 
-    with pytest.raises(ValueError, match='OPENROUTER_API_KEY'):
-        OpenRouterEngine()
+    with pytest.raises(ValueError, match='API key must be provided'):
+        OpenRouterEngine(api_key=api_key)
 
 
 def test_constructor_rejects_missing_model(monkeypatch):
     settings = SimpleNamespace(
-        OPENROUTER_API_KEY=SecretStr('test-key'),
         OPENROUTER_MODEL='  ',
         OPENROUTER_TEMPERATURE=0.4,
     )
@@ -69,7 +57,7 @@ def test_constructor_rejects_missing_model(monkeypatch):
     )
 
     with pytest.raises(ValueError, match='OPENROUTER_MODEL'):
-        OpenRouterEngine()
+        OpenRouterEngine(api_key='test-key')
 
 
 def test_metadata_preserves_usage_metadata_and_openrouter_fields():
@@ -207,7 +195,7 @@ async def test_generate_uses_inherited_openrouter_chat_contract(
             },
         )
     )
-    engine = OpenRouterEngine(llm=llm)
+    engine = OpenRouterEngine(api_key='test-key', llm=llm)
 
     result = await engine.generate(message_history, 'system prompt')
 
@@ -225,7 +213,7 @@ async def test_generate_uses_inherited_openrouter_chat_contract(
 async def test_generate_passes_through_structured_output(
     message_history, mock_ollama_llm
 ):
-    engine = OpenRouterEngine(llm=mock_ollama_llm.llm)
+    engine = OpenRouterEngine(api_key='test-key', llm=mock_ollama_llm.llm)
 
     result = await engine.generate(
         message_history, 'system prompt', output_schema=dict
@@ -239,7 +227,9 @@ async def test_generate_passes_through_structured_output(
 async def test_generate_passes_through_tool_calls(
     message_history, mock_ollama_tool_call_llm, sample_tool
 ):
-    engine = OpenRouterEngine(llm=mock_ollama_tool_call_llm.llm)
+    engine = OpenRouterEngine(
+        api_key='test-key', llm=mock_ollama_tool_call_llm.llm
+    )
 
     result = await engine.generate(
         message_history, 'system prompt', tools=[sample_tool]
@@ -253,7 +243,7 @@ async def test_generate_passes_through_tool_calls(
 async def test_generate_propagates_provider_error(message_history):
     llm = MagicMock()
     llm.ainvoke = AsyncMock(side_effect=RuntimeError('provider unavailable'))
-    engine = OpenRouterEngine(llm=llm)
+    engine = OpenRouterEngine(api_key='test-key', llm=llm)
 
     with pytest.raises(RuntimeError, match='provider unavailable'):
         await engine.generate(message_history, 'system prompt')
@@ -266,7 +256,7 @@ async def test_generate_rejects_non_mapping_structured_envelope(
     llm = MagicMock()
     runnable = SimpleNamespace(ainvoke=AsyncMock(return_value='invalid'))
     llm.with_structured_output.return_value = runnable
-    engine = OpenRouterEngine(llm=llm)
+    engine = OpenRouterEngine(api_key='test-key', llm=llm)
 
     with pytest.raises(TypeError, match='invalid envelope'):
         await engine.generate(message_history, 'prompt', output_schema=dict)
@@ -286,7 +276,7 @@ async def test_generate_raises_structured_parse_error(message_history):
         )
     )
     llm.with_structured_output.return_value = runnable
-    engine = OpenRouterEngine(llm=llm)
+    engine = OpenRouterEngine(api_key='test-key', llm=llm)
 
     with pytest.raises(ValueError, match='parsing failed') as error:
         await engine.generate(message_history, 'prompt', output_schema=dict)
@@ -298,7 +288,7 @@ async def test_generate_raises_structured_parse_error(message_history):
 async def test_generate_rejects_non_message_provider_response(message_history):
     llm = MagicMock()
     llm.ainvoke = AsyncMock(return_value='invalid')
-    engine = OpenRouterEngine(llm=llm)
+    engine = OpenRouterEngine(api_key='test-key', llm=llm)
 
     with pytest.raises(TypeError, match='invalid message'):
         await engine.generate(message_history, 'prompt')
@@ -328,7 +318,7 @@ async def test_stream_returns_text_and_complete_usage_metadata(
         )
 
     llm.astream = MagicMock(side_effect=stream_chunks)
-    engine = OpenRouterEngine(llm=llm)
+    engine = OpenRouterEngine(api_key='test-key', llm=llm)
 
     events = [event async for event in engine.stream(message_history, 'prompt')]
     text = ''.join(
@@ -363,7 +353,7 @@ async def test_stream_returns_empty_final_when_provider_emits_no_chunks(
             yield AIMessageChunk(content='unreachable')
 
     llm.astream = MagicMock(side_effect=stream_no_chunks)
-    engine = OpenRouterEngine(llm=llm)
+    engine = OpenRouterEngine(api_key='test-key', llm=llm)
 
     events = [event async for event in engine.stream(message_history, 'prompt')]
 
@@ -377,7 +367,9 @@ async def test_stream_returns_empty_final_when_provider_emits_no_chunks(
 async def test_stream_passes_through_tool_call_deltas(
     message_history, mock_ollama_tool_call_llm, sample_tool
 ):
-    engine = OpenRouterEngine(llm=mock_ollama_tool_call_llm.llm)
+    engine = OpenRouterEngine(
+        api_key='test-key', llm=mock_ollama_tool_call_llm.llm
+    )
 
     events = [
         event

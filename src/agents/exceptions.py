@@ -44,6 +44,12 @@ class MessageNotFoundException(AgentsException):
         super().__init__(f'Message {message_id} not found')
 
 
+class ApiKeyNotFoundException(AgentsException):
+    def __init__(self, api_key_id: int) -> None:
+        self.api_key_id = api_key_id
+        super().__init__(f'API key {api_key_id} not found')
+
+
 class IdentityServiceException(AgentsException):
     """Raised when the Identity service cannot serve a request."""
 

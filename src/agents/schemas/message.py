@@ -44,6 +44,7 @@ class MessageSchema(BaseModel):
 class CreateMessageSchema(BaseModel):
     chat_id: int | None = Field(default=None, gt=0)
     project_id: int | None = Field(default=None, gt=0)
+    api_key_id: int = Field(gt=0)
     text: str
 
     @field_validator('text')

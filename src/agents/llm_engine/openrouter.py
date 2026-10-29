@@ -13,24 +13,20 @@ logger = get_logger(__name__)
 
 
 class OpenRouterEngine(LangChainEngine):
-    def __init__(self, llm: BaseChatModel | None = None) -> None:
-        super().__init__(llm)
+    def __init__(
+        self,
+        api_key: str,
+        llm: BaseChatModel | None = None,
+    ) -> None:
+        super().__init__(api_key, llm)
 
     @staticmethod
-    def _create_llm() -> BaseChatModel:
+    def _create_llm(api_key: str) -> BaseChatModel:
         settings = get_settings()
-        api_key = settings.OPENROUTER_API_KEY.get_secret_value()
         if not api_key.strip():
-            raise ValueError(
-                'OPENROUTER_API_KEY must be configured when '
-                'LLM_PROVIDER is openrouter'
-            )
+            raise ValueError('API key must be provided for OpenRouter')
         if not settings.OPENROUTER_MODEL.strip():
-            raise ValueError(
-                'OPENROUTER_MODEL must be configured when '
-                'LLM_PROVIDER is openrouter'
-            )
-
+            raise ValueError('OPENROUTER_MODEL must be configured')
         logger.info(
             'Configuring OpenRouter chat engine: model=%s',
             settings.OPENROUTER_MODEL,
