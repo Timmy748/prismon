@@ -189,3 +189,37 @@ Atualiza um asset do projeto.
 
 Remove um asset do projeto.
 
+### Chaves de API
+
+As chaves de membros pertencem à participação no projeto. Membros ativos
+podem cadastrar e listar suas próprias chaves; o dono pode cadastrar e
+remover chaves do projeto. Membros ativos podem listar os hints das chaves
+do projeto. Um membro pode remover sua própria chave.
+
+As listagens retornam `items`, `limit`, `more` e `cursor`, aceitando os
+parâmetros `limit` (1 a 100, padrão 50) e `cursor`. As respostas retornam
+apenas identificador, provedor, hint e data de criação, sem o segredo.
+
+* `POST /projects/{project_id}/members/me/api-keys`
+* `GET /projects/{project_id}/members/me/api-keys`
+* `POST /projects/{project_id}/api-keys`
+* `GET /projects/{project_id}/api-keys`
+* `DELETE /projects/{project_id}/api-keys/{api_key_id}`
+
+### Chaves de API
+
+As chaves de API pertencem a uma participação de membro ou ao projeto.
+Somente membros ativos podem consultar os hints do projeto; cada membro
+consulta e remove suas próprias chaves. Apenas o dono pode cadastrar ou
+remover chaves do projeto. As respostas não incluem o segredo.
+
+* `POST /projects/{project_id}/members/me/api-keys`: cadastra uma chave do membro.
+* `GET /projects/{project_id}/members/me/api-keys`: lista os hints do membro.
+* `POST /projects/{project_id}/api-keys`: cadastra uma chave do projeto.
+* `GET /projects/{project_id}/api-keys`: lista os hints do projeto.
+* `DELETE /projects/{project_id}/api-keys/{api_key_id}`: remove uma chave autorizada.
+
+Configure `API_KEY_KEK` com 32 bytes aleatórios codificados em base64 antes
+de cadastrar chaves. A mesma KEK é necessária para decifrar as chaves já
+salvas; sua substituição exige migrar as DEKs existentes.
+

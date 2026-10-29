@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.logs import get_logger
 from project.database import get_session_factory
+from project.repositories.api_key import ApiKeyRepository, IApiKeyRepository
 from project.repositories.asset import AssetRepository, IAssetRepository
 from project.repositories.document import (
     DocumentRepository,
@@ -31,6 +32,9 @@ class IProjectUnitOfWork(Protocol):
     async def rollback(self) -> None: ...
 
     @property
+    def api_key_repository(self) -> IApiKeyRepository: ...
+
+    @property
     def project_repository(self) -> IProjectRepository: ...
 
     @property
@@ -46,6 +50,7 @@ class IProjectUnitOfWork(Protocol):
 class UnitOfWork(IProjectUnitOfWork):
     def __init__(self) -> None:
         self._session: AsyncSession | None = None
+        self._api_key_repository: IApiKeyRepository | None = None
         self._project_repository: IProjectRepository | None = None
         self._member_repository: IMemberRepository | None = None
         self._document_repository: IDocumentRepository | None = None
@@ -57,6 +62,7 @@ class UnitOfWork(IProjectUnitOfWork):
 
         self._session = get_session_factory()()
         logger.debug('Project unit of work opened')
+        self._api_key_repository = ApiKeyRepository(self._session)
         self._project_repository = ProjectRepository(self._session)
         self._member_repository = MemberRepository(self._session)
         self._document_repository = DocumentRepository(self._session)
@@ -82,6 +88,7 @@ class UnitOfWork(IProjectUnitOfWork):
                 )
         finally:
             self._session = None
+            self._api_key_repository = None
             self._project_repository = None
             self._member_repository = None
             self._document_repository = None
@@ -96,6 +103,12 @@ class UnitOfWork(IProjectUnitOfWork):
     async def rollback(self) -> None:
         await self._active_session().rollback()
         logger.debug('Project unit of work rolled back explicitly')
+
+    @property
+    def api_key_repository(self) -> IApiKeyRepository:
+        if self._api_key_repository is None:
+            raise RuntimeError('UnitOfWork context is not active')
+        return self._api_key_repository
 
     @property
     def project_repository(self) -> IProjectRepository:

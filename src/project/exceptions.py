@@ -52,6 +52,12 @@ class AssetNotFoundException(ProjectException):
         super().__init__(f'Asset {asset_id} not found')
 
 
+class ApiKeyNotFoundException(ProjectException):
+    def __init__(self, api_key_id: int) -> None:
+        self.api_key_id = api_key_id
+        super().__init__(f'API key {api_key_id} not found')
+
+
 class MemberAlreadyExistsException(ProjectException):
     def __init__(self, project_id: int, user_id: int) -> None:
         self.project_id = project_id

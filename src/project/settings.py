@@ -1,7 +1,7 @@
 from dataclasses import field
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +17,7 @@ class Settings(BaseSettings):  # pragma: no cover
     RUSTFS_SECRET_KEY: str = field(init=False)
     RUSTFS_REGION: str = field(init=False)
     RUSTFS_PRESIGNED_URL_TTL_SECONDS: int = Field(default=3600, ge=1, le=604800)
+    API_KEY_KEK: SecretStr = SecretStr('')
 
 
 @lru_cache
