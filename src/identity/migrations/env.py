@@ -29,7 +29,10 @@ target_metadata = mapper_registry.metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
-
+def include_object(object, name, type_, reflected, compare_to):
+    if type_ == "table":
+        return name in target_metadata.tables
+    return True
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -49,7 +52,8 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        version_table="alembic_version_identity"
+        version_table="alembic_version_identity",
+        include_object=include_object
     )
 
     with context.begin_transaction():
@@ -73,7 +77,8 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            version_table="alembic_version_identity"
+            version_table="alembic_version_identity",
+            include_object=include_object
         )
 
         with context.begin_transaction():
