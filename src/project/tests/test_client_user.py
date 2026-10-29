@@ -1,6 +1,4 @@
 # ruff: noqa: PLR2004
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -24,24 +22,6 @@ class FakeInvalidTokenException(FakeIdentityException):
 
 class FakeUserNotFoundException(FakeIdentityException):
     pass
-
-
-def api_user():
-    return SimpleNamespace(id=8, username='lee', email='lee@example.com')
-
-
-@pytest.fixture
-def identity_api():
-    api = SimpleNamespace(
-        get_by_id=AsyncMock(return_value=api_user()),
-        get_current_user=AsyncMock(return_value=api_user()),
-    )
-    return api
-
-
-@pytest.fixture
-def identity_client(identity_api):
-    return IdentityClient(identity_api)
 
 
 @pytest.mark.asyncio

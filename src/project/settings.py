@@ -1,7 +1,7 @@
 from dataclasses import field
 from functools import lru_cache
-from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,7 +10,13 @@ class Settings(BaseSettings):  # pragma: no cover
         case_sensitive=False, extra='ignore', env_file='.env'
     )
     DATABASE_URL: str = field(init=False)
-    STORAGE_PATH: Path = Path('storage')
+    RUSTFS_ENDPOINT_URL: str = field(init=False)
+    RUSTFS_PUBLIC_ENDPOINT_URL: str = field(init=False)
+    RUSTFS_BUCKET: str = field(init=False)
+    RUSTFS_ACCESS_KEY: str = field(init=False)
+    RUSTFS_SECRET_KEY: str = field(init=False)
+    RUSTFS_REGION: str = field(init=False)
+    RUSTFS_PRESIGNED_URL_TTL_SECONDS: int = Field(default=3600, ge=1, le=604800)
 
 
 @lru_cache

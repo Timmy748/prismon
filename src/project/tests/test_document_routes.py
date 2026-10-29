@@ -28,6 +28,66 @@ async def test_documents_require_authentication(document_client, document_api):
 
 
 @pytest.mark.asyncio
+async def test_document_file_route_redirects_to_signed_url(
+    document_client, document_api
+):
+    document_api[5].get_presigned_url.return_value = 'https://rustfs.test/view'
+
+    response = await document_client.get(
+        '/projects/2/documents/4/file', cookies={'jwt': 'token'}
+    )
+
+    assert response.status_code == 307
+    assert response.headers['location'] == 'https://rustfs.test/view'
+    document_api[5].get_presigned_url.assert_awaited_once_with(
+        'projects/2/documents/file'
+    )
+
+
+@pytest.mark.asyncio
+async def test_document_download_route_redirects_to_attachment_url(
+    document_client, document_api
+):
+    document_api[
+        5
+    ].get_presigned_url.return_value = 'https://rustfs.test/download'
+
+    response = await document_client.get(
+        '/projects/2/documents/4/download', cookies={'jwt': 'token'}
+    )
+
+    assert response.status_code == 307
+    assert response.headers['location'] == 'https://rustfs.test/download'
+    document_api[5].get_presigned_url.assert_awaited_once_with(
+        'projects/2/documents/file', download_filename='Brief'
+    )
+
+
+@pytest.mark.asyncio
+async def test_document_file_route_requires_authentication(
+    document_client, document_api
+):
+    response = await document_client.get('/projects/2/documents/4/file')
+
+    assert response.status_code == 401
+    document_api[5].get_presigned_url.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_document_download_route_maps_missing_document(
+    document_client, document_api
+):
+    document_api[3].get_document.return_value = None
+
+    response = await document_client.get(
+        '/projects/2/documents/404/download', cookies={'jwt': 'token'}
+    )
+
+    assert response.status_code == 404
+    document_api[5].get_presigned_url.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_client_authentication_error_is_mapped(
     document_client, document_api
 ):
@@ -87,7 +147,7 @@ async def test_upload_document_multipart(document_client, document_api):
     )
     assert response.status_code == 201
     assert response.json()['id'] == 4
-    document_api[5].save.assert_called_once()
+    document_api[5].save.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -100,7 +160,7 @@ async def test_update_document_replaces_file(document_client, document_api):
     )
     assert response.status_code == 200
     document_api[3].update_document.assert_awaited_once()
-    document_api[5].delete.assert_called_once_with(document_api[6].file)
+    document_api[5].delete.assert_awaited_once_with(document_api[6].file)
 
 
 @pytest.mark.asyncio
@@ -113,7 +173,7 @@ async def test_update_document_metadata_without_file(
         data={'name': 'Updated'},
     )
     assert response.status_code == 200
-    document_api[5].save.assert_not_called()
+    document_api[5].save.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -125,7 +185,7 @@ async def test_delete_document_removes_metadata_and_file(
     )
     assert response.status_code == 204
     document_api[3].delete_document.assert_awaited_once_with(4)
-    document_api[5].delete.assert_called_once_with(document_api[6].file)
+    document_api[5].delete.assert_awaited_once_with(document_api[6].file)
 
 
 @pytest.mark.asyncio

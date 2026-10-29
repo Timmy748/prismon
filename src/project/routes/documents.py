@@ -1,9 +1,9 @@
-# ruff: noqa: PLR0913, PLR0917
+# ruff: noqa: PLR0913, PLR0915, PLR0917
 from collections.abc import Callable
 from http import HTTPStatus
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 
 from core.logs import get_logger
 from project.clients.client_user import IUserClient
@@ -24,6 +24,8 @@ from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.documents import (
     add_document,
     delete_document,
+    download_document,
+    get_document_file_url,
     get_documents,
     update_document,
 )
@@ -106,6 +108,7 @@ def create_documents_router(
                         file='', name=name, description=description or ''
                     ),
                     await file.read(),
+                    file.content_type,
                 )
             result = DocumentSchema.from_dto(dto)
             logger.info('Document route completed: operation=create')
@@ -134,6 +137,7 @@ def create_documents_router(
                     document_id,
                     UpdateDocumentDTO(name=name, description=description),
                     await file.read() if file is not None else None,
+                    file.content_type if file is not None else None,
                 )
             result = DocumentSchema.from_dto(dto)
             logger.info('Document route completed: operation=update')
@@ -160,6 +164,54 @@ def create_documents_router(
                 )
             logger.info('Document route completed: operation=delete')
             return Response(status_code=HTTPStatus.NO_CONTENT)
+        except ProjectException as error:
+            return handle_project_error(error)
+
+    @router.get('/{document_id}/file')
+    async def redirect_document_file(
+        request: Request,
+        project_id: int,
+        document_id: int,
+    ):
+        logger.info('Document route started: operation=file')
+        try:
+            user = await resolve_current_user(request.cookies)
+            async with unit_of_work_factory() as unit_of_work:
+                url = await get_document_file_url(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    document_id,
+                )
+            logger.info('Document route completed: operation=file')
+            return RedirectResponse(
+                url=url, status_code=HTTPStatus.TEMPORARY_REDIRECT
+            )
+        except ProjectException as error:
+            return handle_project_error(error)
+
+    @router.get('/{document_id}/download')
+    async def redirect_document_download(
+        request: Request,
+        project_id: int,
+        document_id: int,
+    ):
+        logger.info('Document route started: operation=download')
+        try:
+            user = await resolve_current_user(request.cookies)
+            async with unit_of_work_factory() as unit_of_work:
+                url = await download_document(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    document_id,
+                )
+            logger.info('Document route completed: operation=download')
+            return RedirectResponse(
+                url=url, status_code=HTTPStatus.TEMPORARY_REDIRECT
+            )
         except ProjectException as error:
             return handle_project_error(error)
 
