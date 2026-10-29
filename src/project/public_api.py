@@ -8,11 +8,16 @@ from project.entities.asset import AssetStatus
 from project.entities.document import DocumentStatus
 from project.entities.member import MemberRole
 from project.permissions import ProjectPermission, has_permission
+from project.security.api_key import (
+    IApiKeyEncryption,
+    create_api_key_encryption,
+)
 from project.storage import IStorage
 from project.unit_of_work import (
     IProjectUnitOfWork,
     create_project_unit_of_work,
 )
+from project.use_cases.api_key import get_api_key
 from project.use_cases.assets import get_assets
 from project.use_cases.documents import get_documents
 
@@ -26,14 +31,30 @@ class ProjectPublicAPI:
         unit_of_work_factory: Callable[[], IProjectUnitOfWork] = (
             create_project_unit_of_work
         ),
+        encryption_factory: Callable[
+            [], IApiKeyEncryption
+        ] = create_api_key_encryption,
     ) -> None:
         self.storage_factory = storage_factory
         self.unit_of_work_factory = unit_of_work_factory
+        self.encryption_factory = encryption_factory
 
     def has_permission(
         self, role: MemberRole, permission: ProjectPermission
     ) -> bool:
         return has_permission(role=role, permission=permission)
+
+    async def get_api_key(
+        self, project_id: int, user_id: int, api_key_id: int
+    ) -> str:
+        async with self.unit_of_work_factory() as unit_of_work:
+            return await get_api_key(
+                uow=unit_of_work,
+                project_id=project_id,
+                user_id=user_id,
+                api_key_id=api_key_id,
+                encryptor=self.encryption_factory(),
+            )
 
     async def get_documents(
         self,

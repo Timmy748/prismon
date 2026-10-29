@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 
+import project.public_api as public_api_module
 from project.dtos.member import MemberDTO
 from project.dtos.page import CursorPage, PaginationDTO
 from project.entities.member import MemberRole, MemberStatus
@@ -120,3 +122,26 @@ async def test_public_api_asset_access_rejects_non_member(
     mock_member_repo.get_members.return_value = CursorPage([], PaginationDTO())
     with pytest.raises(ProjectNotFoundException):
         await public_api.get_assets(8, 12)
+
+
+@pytest.mark.asyncio
+async def test_public_api_get_api_key_wraps_use_case(
+    key_encryptor, monkeypatch, public_api
+):
+    use_case = AsyncMock(return_value='decrypted-secret')
+    monkeypatch.setattr(public_api_module, 'get_api_key', use_case)
+    public_api.encryption_factory = lambda: key_encryptor
+    uow = public_api.unit_of_work_factory()
+
+    result = await public_api.get_api_key(12, 34, 56)
+
+    assert result == 'decrypted-secret'
+    use_case.assert_awaited_once_with(
+        uow=uow,
+        project_id=12,
+        user_id=34,
+        api_key_id=56,
+        encryptor=key_encryptor,
+    )
+    uow.__aenter__.assert_awaited_once()
+    uow.__aexit__.assert_awaited_once()

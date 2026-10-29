@@ -1,5 +1,8 @@
+from datetime import UTC, datetime
+
 import pytest
 
+from project.dtos.api_key import ApiKeyDTO
 from project.dtos.page import PaginationDTO
 from project.entities.api_key import ApiKeyProvider
 from project.entities.member import MemberRole, MemberStatus
@@ -12,9 +15,28 @@ from project.use_cases.api_key import (
     create_member_api_key,
     create_project_api_key,
     delete_api_key,
+    get_api_key,
     list_member_api_keys,
     list_project_api_keys,
 )
+
+
+def _encrypted_api_key(
+    key_encryptor, secret, *, member_id=None, project_id=None
+):
+    encrypted = key_encryptor.encrypt(secret)
+    return ApiKeyDTO(
+        id=56,
+        provider=ApiKeyProvider.OPENROUTER,
+        api_hint='****',
+        encrypted_api_key=encrypted.encrypted_api_key,
+        encrypted_dek=encrypted.encrypted_dek,
+        api_key_nonce=encrypted.api_key_nonce,
+        dek_nonce=encrypted.dek_nonce,
+        member_id=member_id,
+        project_id=project_id,
+        created_at=datetime.now(UTC),
+    )
 
 
 @pytest.mark.asyncio
@@ -123,6 +145,84 @@ async def test_missing_key_is_hidden(api_key_context):
     uow, project, _, _ = api_key_context
     with pytest.raises(ApiKeyNotFoundException):
         await delete_api_key(uow, project.id, 1, 999)
+
+
+@pytest.mark.asyncio
+async def test_get_api_key_decrypts_own_member_key(
+    api_key_use_case_context, key_encryptor
+):
+    uow, project, members = api_key_use_case_context
+    secret = 'member-secret'
+    key = _encrypted_api_key(key_encryptor, secret, member_id=members[1].id)
+    uow.api_key_repository.get_api_key.return_value = key
+
+    result = await get_api_key(uow, project.id, 1, key.id, key_encryptor)
+
+    assert result == secret
+
+
+@pytest.mark.asyncio
+async def test_project_key_is_readable_by_active_project_member(
+    api_key_use_case_context, key_encryptor
+):
+    uow, project, _ = api_key_use_case_context
+    secret = 'shared-project-secret'
+    key = _encrypted_api_key(key_encryptor, secret, project_id=project.id)
+    uow.api_key_repository.get_api_key.return_value = key
+
+    result = await get_api_key(uow, project.id, 2, key.id, key_encryptor)
+
+    assert result == secret
+
+
+@pytest.mark.asyncio
+async def test_get_api_key_hides_another_members_key(
+    api_key_use_case_context, key_encryptor
+):
+    uow, project, members = api_key_use_case_context
+    key = _encrypted_api_key(
+        key_encryptor, 'private-secret', member_id=members[1].id
+    )
+    uow.api_key_repository.get_api_key.return_value = key
+
+    with pytest.raises(ApiKeyNotFoundException):
+        await get_api_key(uow, project.id, 2, key.id, key_encryptor)
+
+
+@pytest.mark.asyncio
+async def test_get_api_key_hides_key_from_another_project(
+    api_key_use_case_context, key_encryptor
+):
+    uow, project, _ = api_key_use_case_context
+    key = _encrypted_api_key(
+        key_encryptor, 'other-project-secret', project_id=project.id + 1
+    )
+    uow.api_key_repository.get_api_key.return_value = key
+
+    with pytest.raises(ApiKeyNotFoundException):
+        await get_api_key(uow, project.id, 1, key.id, key_encryptor)
+
+
+@pytest.mark.asyncio
+async def test_get_api_key_hides_missing_key(
+    api_key_use_case_context, key_encryptor
+):
+    uow, project, _ = api_key_use_case_context
+    uow.api_key_repository.get_api_key.return_value = None
+
+    with pytest.raises(ApiKeyNotFoundException):
+        await get_api_key(uow, project.id, 1, 999, key_encryptor)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('user_id', [3, 4])
+async def test_get_api_key_requires_active_project_membership(
+    api_key_use_case_context, key_encryptor, user_id
+):
+    uow, project, _ = api_key_use_case_context
+
+    with pytest.raises(ProjectNotFoundException):
+        await get_api_key(uow, project.id, user_id, 999, key_encryptor)
 
 
 @pytest.mark.asyncio
