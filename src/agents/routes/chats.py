@@ -146,6 +146,7 @@ def create_chat_routes(  # noqa: PLR0915
                 project_client,
                 chat_id,
                 user.id,
+                data.api_key_id,
                 user_message,
             )
 

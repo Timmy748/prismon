@@ -11,11 +11,16 @@ logger = get_logger(__name__)
 
 
 class OllamaEngine(LangChainEngine):
-    def __init__(self, llm: BaseChatModel | None = None) -> None:
-        super().__init__(llm)
+    def __init__(
+        self,
+        api_key: str,
+        llm: BaseChatModel | None = None,
+    ) -> None:
+        super().__init__(api_key, llm)
 
     @staticmethod
-    def _create_llm() -> BaseChatModel:
+    def _create_llm(api_key: str) -> BaseChatModel:
+        del api_key
         settings = get_settings()
         logger.info(
             'Configuring Ollama chat engine: model=%s', settings.OLLAMA_MODEL

@@ -29,12 +29,16 @@ logger = get_logger(__name__)
 
 
 class LangChainEngine(ABC, ILLMEngine):
-    def __init__(self, llm: BaseChatModel | None = None) -> None:
-        self._llm = llm if llm is not None else self._create_llm()
+    def __init__(
+        self,
+        api_key: str,
+        llm: BaseChatModel | None = None,
+    ) -> None:
+        self._llm = llm if llm is not None else self._create_llm(api_key)
 
     @staticmethod
     @abstractmethod
-    def _create_llm() -> BaseChatModel: ...
+    def _create_llm(api_key: str) -> BaseChatModel: ...
 
     @staticmethod
     @abstractmethod

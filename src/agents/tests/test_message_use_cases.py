@@ -1,12 +1,15 @@
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 
+import agents.use_cases.chats as chat_use_cases
 from agents.dtos.chat import ChatDTO, CreateChatDTO, UpdateTitleChatDTO
 from agents.dtos.message import CreateMessageDTO, MessageDTO
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.entities.message import SenderType
 from agents.exceptions import (
+    ApiKeyNotFoundException,
     ChatNotFoundException,
     ChatOwnerException,
     EmptyMessageException,
@@ -53,6 +56,7 @@ def _configure_valid_send(
         3, 'Research', 4, 9, datetime.now(UTC), datetime.now(UTC)
     )
     project_client.has_permission.return_value = True
+    project_client.get_api_key.return_value = 'api-secret'
     message_repository.get_messages_by_chat.side_effect = [
         CursorPage([], PaginationDTO(limit=1)),
         CursorPage(
@@ -75,6 +79,7 @@ async def test_send_message_stream_persists_unlinked_assistant_message(
     message_repository,
     project_client,
     workflow_stub,
+    monkeypatch,
 ):
     user_message = _message_dto(SenderType.USER, message_id=6)
     previous_user = _message_dto(SenderType.USER, message_id=2)
@@ -96,12 +101,18 @@ async def test_send_message_stream_persists_unlinked_assistant_message(
     )
     message_repository.create_ai_message.return_value = assistant_message
     data = CreateMessageDTO(None, SenderType.USER, 'hello', {}, {})
+    monkeypatch.setattr(
+        chat_use_cases,
+        'get_settings',
+        lambda: SimpleNamespace(LLM_PROVIDER='openrouter'),
+    )
 
     events = await send_message(
         chat_repository,
         project_client,
         3,
         9,
+        123,
         data,
     )
     received = [event async for event in events]
@@ -114,9 +125,13 @@ async def test_send_message_stream_persists_unlinked_assistant_message(
     project_client.has_permission.assert_awaited_once_with(
         4, 9, ProjectPermission.CHAT_SEND_MESSAGE
     )
+    project_client.get_api_key.assert_awaited_once_with(4, 9, 123)
     message_repository.create_human_message.assert_awaited_once_with(3, 'hello')
     workflow_stub.registry.get_workflow.assert_called_once_with(
         'chat', engine=workflow_stub.engine
+    )
+    chat_use_cases.create_llm_engine.assert_called_once_with(
+        api_key='api-secret', provider='openrouter'
     )
     workflow_stub.workflow.stream.assert_called_once_with(
         '3', {'messages': [previous_user, previous_assistant, user_message]}
@@ -157,6 +172,7 @@ async def test_send_message_rejects_blank_user_text(
             project_client,
             3,
             9,
+            123,
             data,
         )
 
@@ -177,6 +193,7 @@ async def test_send_message_rejects_missing_chat(
             project_client,
             3,
             9,
+            123,
             data,
         )
 
@@ -199,6 +216,7 @@ async def test_send_message_rejects_non_owner(
             project_client,
             3,
             9,
+            123,
             data,
         )
 
@@ -222,8 +240,37 @@ async def test_send_message_rejects_missing_project_permission(
             project_client,
             3,
             9,
+            123,
             data,
         )
+
+    project_client.get_api_key.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_message_rejects_missing_api_key_before_engine_or_persist(
+    chat_repository,
+    message_repository,
+    project_client,
+    workflow_stub,
+):
+    _configure_valid_send(chat_repository, message_repository, project_client)
+    project_client.get_api_key.side_effect = ApiKeyNotFoundException(123)
+    data = CreateMessageDTO(None, SenderType.USER, 'hello', {}, {})
+
+    with pytest.raises(ApiKeyNotFoundException):
+        await send_message(
+            chat_repository,
+            project_client,
+            3,
+            9,
+            123,
+            data,
+        )
+
+    project_client.get_api_key.assert_awaited_once_with(4, 9, 123)
+    chat_use_cases.create_llm_engine.assert_not_called()
+    message_repository.create_human_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -248,6 +295,7 @@ async def test_send_message_rejects_consecutive_user_message(
             project_client,
             3,
             9,
+            123,
             data,
         )
 
@@ -267,6 +315,7 @@ async def test_send_message_checks_latest_message_with_limit_one(
         project_client,
         3,
         9,
+        123,
         data,
     )
 
@@ -298,6 +347,7 @@ async def test_send_message_rejects_blank_workflow_response(
         project_client,
         3,
         9,
+        123,
         data,
     )
 
@@ -328,6 +378,7 @@ async def test_send_message_stream_converts_generation_failure_to_error_event(
         project_client,
         3,
         9,
+        123,
         data,
     )
     received = [event async for event in events]
@@ -360,6 +411,7 @@ async def test_send_message_ignores_empty_chunks_and_unknown_events(
         project_client,
         3,
         9,
+        123,
         CreateMessageDTO(None, SenderType.USER, 'hello', {}, {}),
     )
 
@@ -386,6 +438,7 @@ async def test_send_message_emits_error_when_workflow_has_no_final_event(
         project_client,
         3,
         9,
+        123,
         CreateMessageDTO(None, SenderType.USER, 'hello', {}, {}),
     )
 
@@ -420,6 +473,7 @@ async def test_send_message_emits_error_if_chat_disappears_before_save(
         project_client,
         3,
         9,
+        123,
         CreateMessageDTO(None, SenderType.USER, 'hello', {}, {}),
     )
 

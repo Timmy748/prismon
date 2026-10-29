@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 
 from agents.exceptions import (
     AgentsException,
+    ApiKeyNotFoundException,
     ChatNotFoundException,
     ChatOwnerException,
     EmptyMessageException,
@@ -20,6 +21,7 @@ from core.logs import get_logger
 logger = get_logger(__name__)
 
 DOMAIN_ERROR_STATUS: dict[type[AgentsException], HTTPStatus] = {
+    ApiKeyNotFoundException: HTTPStatus.NOT_FOUND,
     ChatNotFoundException: HTTPStatus.NOT_FOUND,
     ChatOwnerException: HTTPStatus.FORBIDDEN,
     MessageNotFoundException: HTTPStatus.NOT_FOUND,

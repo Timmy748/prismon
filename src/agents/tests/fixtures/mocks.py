@@ -56,7 +56,9 @@ def workflow_uow(workflow_repository):
 
 @pytest.fixture
 def project_client():
-    return AsyncMock(spec=IProjectClient)
+    client = AsyncMock(spec=IProjectClient)
+    client.get_api_key.return_value = 'api-secret'
+    return client
 
 
 @pytest.fixture

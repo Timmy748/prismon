@@ -5,6 +5,10 @@ import pytest
 
 from agents.clients import project as project_client_module
 from agents.clients.project import ProjectClient, create_project_client
+from agents.exceptions import ApiKeyNotFoundException
+from project.exceptions import (
+    ApiKeyNotFoundException as ProjectApiKeyNotFoundException,
+)
 
 
 def _uow(member_repository):
@@ -124,6 +128,30 @@ async def test_has_permission_returns_project_permission_result():
     result = await client.has_permission(3, 9, 'chat:create')
 
     assert result is False
+
+
+@pytest.mark.asyncio
+async def test_get_api_key_delegates_to_project_public_api():
+    project_api = Mock()
+    project_api.get_api_key = AsyncMock(return_value='decrypted-secret')
+    client = ProjectClient(project_api)
+
+    result = await client.get_api_key(3, 9, 123)
+
+    assert result == 'decrypted-secret'
+    project_api.get_api_key.assert_awaited_once_with(3, 9, 123)
+
+
+@pytest.mark.asyncio
+async def test_get_api_key_translates_missing_key_exception():
+    project_api = Mock()
+    project_api.get_api_key = AsyncMock(
+        side_effect=ProjectApiKeyNotFoundException(123)
+    )
+    client = ProjectClient(project_api)
+
+    with pytest.raises(ApiKeyNotFoundException, match='API key 123 not found'):
+        await client.get_api_key(3, 9, 123)
 
 
 def test_create_project_client_wires_public_api():

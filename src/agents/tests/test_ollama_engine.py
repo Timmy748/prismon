@@ -30,7 +30,7 @@ async def test_generate_logs_and_reraises_model_error(
     mock_ollama_llm.llm.ainvoke = AsyncMock(
         side_effect=RuntimeError('model unavailable')
     )
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     with caplog.at_level(logging.ERROR, logger='agents.llm_engine.ollama'):
         with pytest.raises(RuntimeError, match='model unavailable'):
@@ -47,7 +47,7 @@ def test_constructor_configures_chat_ollama(monkeypatch, ollama_settings):
     )
     monkeypatch.setattr('agents.llm_engine.ollama.ChatOllama', factory)
 
-    OllamaEngine()
+    OllamaEngine(api_key='unused-key')
 
     factory.assert_called_once_with(
         base_url='http://ollama:11434', model='test-model', temperature=0.25
@@ -58,7 +58,7 @@ def test_constructor_configures_chat_ollama(monkeypatch, ollama_settings):
 async def test_generate_returns_text_and_metadata(
     mock_ollama_llm, message_history
 ):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     result = await engine.generate(message_history, 'system instructions')
 
@@ -71,7 +71,7 @@ async def test_generate_returns_text_and_metadata(
 
 @pytest.mark.asyncio
 async def test_generate_reports_token_usage(mock_ollama_llm, message_history):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     result = await engine.generate(message_history, 'system instructions')
 
@@ -86,7 +86,7 @@ async def test_generate_reports_token_usage(mock_ollama_llm, message_history):
 async def test_generate_reports_generation_rate(
     mock_ollama_llm, message_history
 ):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     result = await engine.generate(message_history, 'system instructions')
 
@@ -103,7 +103,7 @@ async def test_generate_derives_total_tokens_from_response_metadata(
             response_metadata={'prompt_eval_count': 3, 'eval_count': 4},
         )
     )
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     result = await engine.generate(message_history, 'prompt')
 
@@ -114,7 +114,7 @@ async def test_generate_derives_total_tokens_from_response_metadata(
 async def test_generate_passes_runnable_config(
     mock_ollama_llm, message_history
 ):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     await engine.generate(
         message_history, 'system instructions', temperature=0.5
@@ -134,7 +134,9 @@ async def test_generate_passes_runnable_config(
 async def test_generate_binds_tools_for_this_call(
     mock_ollama_tool_call_llm, message_history, sample_tool
 ):
-    engine = OllamaEngine(llm=mock_ollama_tool_call_llm.llm)
+    engine = OllamaEngine(
+        api_key='unused-key', llm=mock_ollama_tool_call_llm.llm
+    )
 
     await engine.generate(message_history, 'prompt', tools=[sample_tool])
 
@@ -147,7 +149,9 @@ async def test_generate_binds_tools_for_this_call(
 async def test_generate_returns_normalized_tool_calls(
     mock_ollama_tool_call_llm, message_history, sample_tool
 ):
-    engine = OllamaEngine(llm=mock_ollama_tool_call_llm.llm)
+    engine = OllamaEngine(
+        api_key='unused-key', llm=mock_ollama_tool_call_llm.llm
+    )
 
     result = await engine.generate(
         message_history, 'prompt', tools=[sample_tool]
@@ -213,7 +217,7 @@ def test_tool_call_deltas_skips_entries_without_integer_index():
 async def test_generate_structured_returns_parsed_schema(
     mock_ollama_llm, message_history
 ):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     result = await engine.generate(
         message_history, 'system instructions', output_schema=dict
@@ -226,7 +230,7 @@ async def test_generate_structured_returns_parsed_schema(
 async def test_generate_structured_keeps_raw_text(
     mock_ollama_llm, message_history
 ):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     result = await engine.generate(
         message_history, 'system instructions', output_schema=dict
@@ -239,7 +243,7 @@ async def test_generate_structured_keeps_raw_text(
 async def test_generate_structured_requests_raw_response(
     mock_ollama_llm, message_history
 ):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     await engine.generate(message_history, 'prompt', output_schema=dict)
 
@@ -254,7 +258,7 @@ async def test_generate_structured_rejects_non_mapping_envelope(
 ):
     runnable = SimpleNamespace(ainvoke=AsyncMock(return_value='invalid'))
     mock_ollama_llm.llm.with_structured_output.return_value = runnable
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     with pytest.raises(TypeError, match='invalid envelope'):
         await engine.generate(message_history, 'prompt', output_schema=dict)
@@ -275,7 +279,7 @@ async def test_generate_structured_raises_parsing_error(
         )
     )
     mock_ollama_llm.llm.with_structured_output.return_value = runnable
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     with pytest.raises(ValueError, match='parsing failed') as error:
         await engine.generate(message_history, 'prompt', output_schema=dict)
@@ -288,7 +292,7 @@ async def test_generate_rejects_non_message_response(
     mock_ollama_llm, message_history
 ):
     mock_ollama_llm.llm.ainvoke = AsyncMock(return_value='invalid')
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     with pytest.raises(TypeError, match='invalid message'):
         await engine.generate(message_history, 'prompt')
@@ -296,7 +300,7 @@ async def test_generate_rejects_non_message_response(
 
 @pytest.mark.asyncio
 async def test_stream_emits_text_deltas(mock_ollama_llm, message_history):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     chunks = [chunk async for chunk in engine.stream(message_history, 'prompt')]
 
@@ -311,7 +315,7 @@ async def test_stream_emits_text_deltas(mock_ollama_llm, message_history):
 async def test_stream_ends_with_generation_final(
     mock_ollama_llm, message_history
 ):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     events = [event async for event in engine.stream(message_history, 'prompt')]
 
@@ -322,7 +326,7 @@ async def test_stream_ends_with_generation_final(
 async def test_stream_final_contains_usage_metadata(
     mock_ollama_llm, message_history
 ):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     events = [event async for event in engine.stream(message_history, 'prompt')]
     final = next(
@@ -341,7 +345,7 @@ async def test_stream_skips_non_chunk_responses(
         yield AIMessageChunk(content='valid chunk')
 
     mock_ollama_llm.llm.astream = MagicMock(side_effect=stream_non_chunk)
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     events = [event async for event in engine.stream(message_history, 'prompt')]
 
@@ -354,7 +358,7 @@ async def test_stream_skips_non_chunk_responses(
 async def test_stream_final_contains_aggregated_text(
     mock_ollama_llm, message_history
 ):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     events = [event async for event in engine.stream(message_history, 'prompt')]
     final = next(
@@ -368,7 +372,7 @@ async def test_stream_final_contains_aggregated_text(
 async def test_stream_final_reports_all_available_metadata(
     mock_ollama_llm, message_history
 ):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     events = [event async for event in engine.stream(message_history, 'prompt')]
     final = next(
@@ -396,7 +400,9 @@ async def test_stream_final_reports_all_available_metadata(
 async def test_stream_emits_tool_call_deltas(
     mock_ollama_tool_call_llm, message_history, sample_tool
 ):
-    engine = OllamaEngine(llm=mock_ollama_tool_call_llm.llm)
+    engine = OllamaEngine(
+        api_key='unused-key', llm=mock_ollama_tool_call_llm.llm
+    )
 
     chunks = [
         chunk
@@ -420,7 +426,9 @@ async def test_stream_emits_tool_call_deltas(
 async def test_stream_final_contains_aggregated_tool_call(
     mock_ollama_tool_call_llm, message_history, sample_tool
 ):
-    engine = OllamaEngine(llm=mock_ollama_tool_call_llm.llm)
+    engine = OllamaEngine(
+        api_key='unused-key', llm=mock_ollama_tool_call_llm.llm
+    )
 
     events = [
         event
@@ -441,7 +449,7 @@ async def test_stream_final_contains_aggregated_tool_call(
 async def test_stream_passes_messages_and_config(
     mock_ollama_llm, message_history
 ):
-    engine = OllamaEngine(llm=mock_ollama_llm.llm)
+    engine = OllamaEngine(api_key='unused-key', llm=mock_ollama_llm.llm)
 
     _ = [
         chunk

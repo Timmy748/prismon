@@ -3,9 +3,13 @@
 from collections.abc import Callable
 from typing import Protocol
 
+from agents.exceptions import ApiKeyNotFoundException
 from core.logs import get_logger
 from project.dtos.page import PaginationDTO
 from project.entities.member import MemberRole, MemberStatus
+from project.exceptions import (
+    ApiKeyNotFoundException as ProjectApiKeyNotFoundException,
+)
 from project.permissions import ProjectPermission
 from project.public_api import ProjectPublicAPI
 from project.storage import create_storage
@@ -21,6 +25,10 @@ class IProjectClient(Protocol):
     async def has_permission(
         self, project_id: int, user_id: int, permission: ProjectPermission
     ) -> bool: ...
+
+    async def get_api_key(
+        self, project_id: int, user_id: int, api_key_id: int
+    ) -> str: ...
 
 
 class ProjectClient:
@@ -65,6 +73,16 @@ class ProjectClient:
             allowed,
         )
         return allowed
+
+    async def get_api_key(
+        self, project_id: int, user_id: int, api_key_id: int
+    ) -> str:
+        try:
+            return await self._project_api.get_api_key(
+                project_id, user_id, api_key_id
+            )
+        except ProjectApiKeyNotFoundException as error:
+            raise ApiKeyNotFoundException(api_key_id) from error
 
 
 def create_project_client() -> ProjectClient:
