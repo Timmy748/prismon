@@ -1,9 +1,11 @@
+import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+from testcontainers.postgres import PostgresContainer
 
 from project.entities import asset, document, member, project  # noqa: F401
 from project.entities.registry import mapper_registry
@@ -13,9 +15,20 @@ from project.repositories.member import MemberRepository
 from project.repositories.project import ProjectRepository
 
 
+@pytest.fixture(scope='session')
+def project_postgres_container():
+    with PostgresContainer('postgres:16-alpine') as postgres:
+        yield postgres
+
+
 @pytest_asyncio.fixture
-async def session():
-    engine = create_async_engine('sqlite+aiosqlite:///:memory:')
+async def session(project_postgres_container):
+    database_url = (
+        project_postgres_container.get_connection_url()
+        .replace('postgresql+psycopg2://', 'postgresql+psycopg://', 1)
+        .replace('postgresql://', 'postgresql+psycopg://', 1)
+    )
+    engine = create_async_engine(database_url)
     async with engine.begin() as connection:
         await connection.run_sync(mapper_registry.metadata.create_all)
 

@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 
 from core.logs import get_logger
 from project.exceptions import (
+    ApiKeyNotFoundException,
     AssetNotFoundException,
     DocumentNotFoundException,
     InsufficientProjectPermissionException,
@@ -21,6 +22,7 @@ from project.exceptions import (
 logger = get_logger(__name__)
 
 DOMAIN_ERROR_STATUS: dict[type[ProjectException], HTTPStatus] = {
+    ApiKeyNotFoundException: HTTPStatus.NOT_FOUND,
     ProjectNotFoundException: HTTPStatus.NOT_FOUND,
     MemberNotFoundException: HTTPStatus.NOT_FOUND,
     DocumentNotFoundException: HTTPStatus.NOT_FOUND,

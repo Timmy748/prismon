@@ -16,6 +16,7 @@ from identity.security.jwt import create_token_provider
 from identity.security.password_hasher import create_password_hasher
 from identity.unit_of_work import create_identity_unit_of_work
 from project.clients.client_user import create_identity_client
+from project.routes.api_keys import create_api_keys_router
 from project.routes.assets import create_assets_router
 from project.routes.documents import create_documents_router
 from project.routes.members import create_project_members_router
@@ -53,6 +54,9 @@ app.include_router(
         create_project_unit_of_work,
         create_identity_client,
     )
+)
+app.include_router(
+    create_api_keys_router(create_project_unit_of_work, create_identity_client)
 )
 app.include_router(
     create_documents_router(

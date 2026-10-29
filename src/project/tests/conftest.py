@@ -1,3 +1,4 @@
+from project.tests.fixtures.api_keys import *  # noqa: F401, F403
 from project.tests.fixtures.assets import *  # noqa: F401, F403
 from project.tests.fixtures.client_user import *  # noqa: F401, F403
 from project.tests.fixtures.documents import *  # noqa: F401, F403
