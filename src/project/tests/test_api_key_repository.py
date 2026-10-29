@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import update
@@ -7,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from project.dtos.api_key import CreateApiKeyDTO
 from project.dtos.page import PaginationDTO
 from project.entities.api_key import ApiKey, ApiKeyProvider
+from project.repositories.api_key import ApiKeyRepository
 from project.unit_of_work import UnitOfWork
 
 
@@ -38,6 +41,44 @@ async def test_unit_of_work_exposes_api_key_repository(uow_dependencies):
 def test_unit_of_work_hides_api_key_repository_outside_context():
     with pytest.raises(RuntimeError, match='context is not active'):
         UnitOfWork().api_key_repository
+
+
+@pytest.mark.asyncio
+async def test_get_api_key_returns_key_for_existing_id():
+    session = AsyncMock()
+    row = SimpleNamespace(
+        id=123,
+        provider=ApiKeyProvider.OPENROUTER,
+        api_hint='****',
+        encrypted_api_key=b'ciphertext',
+        encrypted_dek=b'wrapped',
+        api_key_nonce=b'api-nonce',
+        dek_nonce=b'dek-nonce',
+        member_id=1,
+        project_id=None,
+        created_at=datetime.now(timezone.utc),
+    )
+    session.get.return_value = row
+    repo = ApiKeyRepository(session)
+
+    result = await repo.get_api_key(123)
+
+    session.get.assert_awaited_once_with(ApiKey, 123)
+    assert result.id == row.id
+    assert result.encrypted_api_key == row.encrypted_api_key
+    assert result.member_id == row.member_id
+
+
+@pytest.mark.asyncio
+async def test_get_api_key_returns_none_for_missing_id():
+    session = AsyncMock()
+    session.get.return_value = None
+    repo = ApiKeyRepository(session)
+
+    result = await repo.get_api_key(999)
+
+    session.get.assert_awaited_once_with(ApiKey, 999)
+    assert result is None
 
 
 @pytest.mark.asyncio

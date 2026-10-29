@@ -7,7 +7,7 @@ from project.exceptions import (
     ApiKeyNotFoundException,
     InsufficientProjectPermissionException,
 )
-from project.security.api_key import IApiKeyEncryption
+from project.security.api_key import EncryptedApiKey, IApiKeyEncryption
 from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.project import _require_project_member
 
@@ -108,6 +108,35 @@ async def list_project_api_keys(
     )
     return CursorPage(
         items=[_hint(key) for key in page.items], pagination=page.pagination
+    )
+
+
+async def get_api_key(
+    uow: IProjectUnitOfWork,
+    project_id: int,
+    user_id: int,
+    api_key_id: int,
+    encryptor: IApiKeyEncryption,
+) -> str:
+    _, member = await _require_project_member(uow, project_id, user_id)
+    key = await uow.api_key_repository.get_api_key(api_key_id)
+    if key is None:
+        raise ApiKeyNotFoundException(api_key_id)
+    owns_key = (
+        key.member_id == member.id and key.project_id is None
+        if key.member_id is not None
+        else key.project_id == project_id
+    )
+    if not owns_key:
+        raise ApiKeyNotFoundException(api_key_id)
+
+    return encryptor.decrypt(
+        EncryptedApiKey(
+            encrypted_api_key=key.encrypted_api_key,
+            encrypted_dek=key.encrypted_dek,
+            api_key_nonce=key.api_key_nonce,
+            dek_nonce=key.dek_nonce,
+        )
     )
 
 
