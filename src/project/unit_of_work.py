@@ -3,7 +3,7 @@ from typing import Protocol, Self
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.logs import get_logger
+from infra.logs import get_logger
 from project.database import get_session_factory
 from project.repositories.api_key import ApiKeyRepository, IApiKeyRepository
 from project.repositories.asset import AssetRepository, IAssetRepository

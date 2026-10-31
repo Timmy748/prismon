@@ -2,7 +2,6 @@
 
 from typing import Protocol
 
-from core.logs import get_logger
 from identity.exceptions import (
     IdentityException,
     InvalidCredentialsException,
@@ -13,6 +12,7 @@ from identity.exceptions import (
 from identity.public_api import IdentityPublicAPI
 from identity.security.jwt import create_token_provider
 from identity.unit_of_work import create_identity_unit_of_work
+from infra.logs import get_logger
 from project.dtos.user import UserDTO
 from project.exceptions import (
     ProjectUserAuthenticationException,

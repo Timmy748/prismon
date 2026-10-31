@@ -7,7 +7,7 @@ from agents.dtos.chat import ChatDTO
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.entities.chat import Chat
 from agents.exceptions import ChatNotFoundException
-from core.logs import get_logger
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

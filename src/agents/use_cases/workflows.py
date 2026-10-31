@@ -1,7 +1,7 @@
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.dtos.workflow import WorkflowDTO
 from agents.unit_of_work import IAgentsUnitOfWork
-from core.logs import get_logger
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

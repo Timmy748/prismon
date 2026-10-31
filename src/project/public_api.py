@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from core.logs import get_logger
+from infra.logs import get_logger
 from project.dtos.asset import AssetDTO
 from project.dtos.document import DocumentDTO
 from project.dtos.page import CursorPage, PaginationDTO

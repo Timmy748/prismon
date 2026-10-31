@@ -2,7 +2,7 @@ from http import HTTPStatus
 
 from fastapi.responses import JSONResponse
 
-from core.logs import get_logger
+from infra.logs import get_logger
 from project.exceptions import (
     ApiKeyNotFoundException,
     AssetNotFoundException,

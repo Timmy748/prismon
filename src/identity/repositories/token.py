@@ -4,9 +4,9 @@ from typing import Protocol
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.logs import get_logger
 from identity.dtos.token import RefreshTokenDTO
 from identity.entities.token import RefreshToken
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

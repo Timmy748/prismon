@@ -5,8 +5,8 @@ from http import HTTPStatus
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 
-from core.logs import get_logger
-from project.clients.client_user import IUserClient
+from infra.logs import get_logger
+from project.clients.client_user import IUserClient, create_identity_client
 from project.dtos.document import (
     CreateDocumentDTO,
     UpdateDocumentDTO,
@@ -19,8 +19,8 @@ from project.exceptions import (
 )
 from project.handlers.errors import handle_project_error
 from project.schemas.document import DocumentPageSchema, DocumentSchema
-from project.storage import IStorage
-from project.unit_of_work import IProjectUnitOfWork
+from project.storage import IStorage, create_storage
+from project.unit_of_work import IProjectUnitOfWork, create_project_unit_of_work
 from project.use_cases.documents import (
     add_document,
     delete_document,
@@ -216,3 +216,10 @@ def create_documents_router(
             return handle_project_error(error)
 
     return router
+
+
+router = create_documents_router(
+    create_project_unit_of_work,
+    create_storage,
+    create_identity_client,
+)

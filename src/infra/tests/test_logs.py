@@ -3,13 +3,13 @@ from threading import Event
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from core import logs
+from infra import logs
 
 
 def test_get_logger_returns_named_builtin_logger():
-    logger = logs.get_logger('core.tests')
+    logger = logs.get_logger('infra.tests')
 
-    assert logger is logging.getLogger('core.tests')
+    assert logger is logging.getLogger('infra.tests')
 
 
 def test_get_logger_returns_root_logger_when_name_is_omitted():
@@ -26,7 +26,7 @@ def test_setup_log_exports_each_record_once_and_is_idempotent(
     initial_handlers = list(root_logger.handlers)
     initial_level = root_logger.level
     settings = SimpleNamespace(
-        OTEL_SERVICE_NAME='core-test-service',
+        OTEL_SERVICE_NAME='infra-test-service',
         OTEL_EXPORTER_OTLP_LOGS_ENDPOINT='http://collector:4317',
         OTEL_EXPORTER_OTLP_ENDPOINT='http://fallback:4317',
     )
@@ -47,7 +47,7 @@ def test_setup_log_exports_each_record_once_and_is_idempotent(
         logs.setup_log()
         logs.setup_log()
 
-        logs.get_logger('core.tests.export').info('one exported record')
+        logs.get_logger('infra.tests.export').info('one exported record')
         provider = logs._logs.get_logger_provider()
         assert provider.force_flush()
 
@@ -64,7 +64,7 @@ def test_setup_log_exports_each_record_once_and_is_idempotent(
         exported_record = memory_log_exporter.records[0]
         assert exported_record.log_record.body == 'one exported record'
         assert exported_record.resource.attributes['service.name'] == (
-            'core-test-service'
+            'infra-test-service'
         )
     finally:
         for handler in list(root_logger.handlers):

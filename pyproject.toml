@@ -68,11 +68,7 @@ addopts = '-p no:warnings'
 asyncio_default_fixture_loop_scope = 'function'
 
 [tool.coverage.run]
-omit = [
-  '*/tests/*',
-  '*/agents/migrations/*',
-  '*/main.py',
-]
+omit = ['*/tests/*', '*/agents/migrations/*', '*/main.py', 'src/infra/app.py']
 
 [tool.taskipy.tasks]
 lint = 'ruff check src/'

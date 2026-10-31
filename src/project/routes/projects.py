@@ -5,8 +5,8 @@ from http import HTTPStatus
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from core.logs import get_logger
-from project.clients.client_user import IUserClient
+from infra.logs import get_logger
+from project.clients.client_user import IUserClient, create_identity_client
 from project.dtos.project import CreateProjectDTO, ProjectDTO, UpdateProjectDTO
 from project.exceptions import (
     ProjectException,
@@ -18,7 +18,7 @@ from project.schemas.project import (
     ProjectSchema,
     UpdateProjectSchema,
 )
-from project.unit_of_work import IProjectUnitOfWork
+from project.unit_of_work import IProjectUnitOfWork, create_project_unit_of_work
 from project.use_cases.project import (
     create_project,
     delete_project,
@@ -132,3 +132,9 @@ def create_project_router(
             return handle_project_error(error)
 
     return router
+
+
+router = create_project_router(
+    create_project_unit_of_work,
+    create_identity_client,
+)

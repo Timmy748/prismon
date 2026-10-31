@@ -4,7 +4,7 @@ from http import HTTPStatus
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from project.clients.client_user import IUserClient
+from project.clients.client_user import IUserClient, create_identity_client
 from project.dtos.api_key_hint import ApiKeyHintDTO
 from project.exceptions import (
     ProjectException,
@@ -16,7 +16,7 @@ from project.security.api_key import (
     IApiKeyEncryption,
     create_api_key_encryption,
 )
-from project.unit_of_work import IProjectUnitOfWork
+from project.unit_of_work import IProjectUnitOfWork, create_project_unit_of_work
 from project.use_cases.api_key import (
     create_member_api_key,
     create_project_api_key,
@@ -141,3 +141,9 @@ def create_api_keys_router(
             return handle_project_error(error)
 
     return router
+
+
+router = create_api_keys_router(
+    create_project_unit_of_work,
+    create_identity_client,
+)

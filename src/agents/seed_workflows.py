@@ -8,7 +8,7 @@ from agents.workflows.registry import (
     WorkflowRegistry,
     workflow_registry_factory,
 )
-from core.logs import get_logger, setup_log
+from infra.logs import get_logger, setup_log
 
 logger = get_logger(__name__)
 

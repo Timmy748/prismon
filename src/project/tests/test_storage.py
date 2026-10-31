@@ -4,7 +4,7 @@ import pytest
 from botocore.exceptions import ClientError
 from pydantic import ValidationError
 
-from project.settings import Settings
+from infra.settings import Settings
 from project.storage import RustFSStorage
 
 EXPECTED_CONCURRENT_WRITE_COUNT = 2

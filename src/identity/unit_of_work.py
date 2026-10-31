@@ -3,13 +3,13 @@ from typing import Protocol, Self
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from core.logs import get_logger
 from identity.database import get_session_factory
 from identity.repositories.token import (
     IRefreshTokenRepository,
     RefreshTokenRepository,
 )
 from identity.repositories.user import IUserRepository, UserRepository
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

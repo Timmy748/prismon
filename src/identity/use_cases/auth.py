@@ -1,7 +1,6 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from core.logs import get_logger
 from identity.dtos.auth import AuthenticationDTO, LoginDTO
 from identity.exceptions import (
     InvalidCredentialsException,
@@ -11,6 +10,7 @@ from identity.exceptions import (
 from identity.security.jwt import ITokenProvider
 from identity.security.password_hasher import PasswordHasher
 from identity.unit_of_work import IIdentityUnitOfWork
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

@@ -4,21 +4,24 @@ from http import HTTPStatus
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
-from core.logs import get_logger
 from identity.dtos.auth import LoginDTO
 from identity.dtos.user import UserDTO
 from identity.exceptions import IdentityException, InvalidTokenException
 from identity.handlers.errors import handle_identity_error
 from identity.schemas.auth import LoginSchema
-from identity.security.jwt import ITokenProvider
-from identity.security.password_hasher import PasswordHasher
-from identity.settings import get_settings
+from identity.security.jwt import ITokenProvider, create_token_provider
+from identity.security.password_hasher import (
+    PasswordHasher,
+    create_password_hasher,
+)
 from identity.unit_of_work import (
     IIdentityUnitOfWork,
     create_identity_unit_of_work,
 )
 from identity.use_cases.auth import login, logout, refresh_token
 from identity.use_cases.user import get_current_user
+from infra.logs import get_logger
+from infra.settings import get_settings
 
 logger = get_logger(__name__)
 
@@ -149,3 +152,10 @@ def create_auth_router(
         return response
 
     return router
+
+
+router = create_auth_router(
+    create_password_hasher,
+    create_token_provider,
+    create_identity_unit_of_work,
+)

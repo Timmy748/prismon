@@ -7,7 +7,7 @@ from agents.database import get_session_factory
 from agents.repositories.chat import ChatRepository, IChatRepository
 from agents.repositories.message import IMessageRepository, MessageRepository
 from agents.repositories.workflow import IWorkflowRepository, WorkflowRepository
-from core.logs import get_logger
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 import project.storage as storage_module
-from project.settings import Settings
+from infra.settings import Settings
 from project.storage import create_storage
 
 
@@ -79,6 +79,11 @@ def set_required_project_environment(monkeypatch):
             'RUSTFS_SECRET_KEY': 'secret',
             'RUSTFS_REGION': 'us-east-1',
             'RUSTFS_PRESIGNED_URL_TTL_SECONDS': str(ttl_seconds),
+            'PASSWORD_PEPPER': 'pepper',
+            'JWT_SECRET_KEY': 'secret',
+            'OTEL_SERVICE_NAME': 'prismon_test',
+            'OTEL_EXPORTER_OTLP_ENDPOINT': 'http://localhost:4317',
+            'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT': 'http://localhost:4317',
         }
         for variable, value in environment.items():
             monkeypatch.setenv(variable, value)

@@ -11,7 +11,7 @@ from project.entities.member import Member
 from project.entities.document import Document
 from project.entities.asset import Asset
 from project.entities.api_key import ApiKey
-from project.settings import get_settings
+from infra.settings import get_settings
 
 
 # this is the Alembic Config object, which provides
