@@ -10,8 +10,8 @@ import aioboto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from core.logs import get_logger
-from project.settings import get_settings
+from infra.logs import get_logger
+from infra.settings import get_settings
 
 logger = get_logger(__name__)
 

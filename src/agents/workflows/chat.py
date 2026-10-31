@@ -15,7 +15,7 @@ from agents.llm_engine.base import (
 )
 from agents.workflows.base import WorkflowExecution
 from agents.workflows.registry import workflow_registry
-from core.logs import get_logger
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

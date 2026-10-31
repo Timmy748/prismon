@@ -5,8 +5,8 @@ from http import HTTPStatus
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from core.logs import get_logger
-from project.clients.client_user import IUserClient
+from infra.logs import get_logger
+from project.clients.client_user import IUserClient, create_identity_client
 from project.dtos.member import ChangeRoleMemberDTO, ResumeInviteMemberDTO
 from project.dtos.page import PaginationDTO
 from project.exceptions import (
@@ -19,7 +19,7 @@ from project.schemas.member import (
     InviteMemberSchema,
     MemberSchema,
 )
-from project.unit_of_work import IProjectUnitOfWork
+from project.unit_of_work import IProjectUnitOfWork, create_project_unit_of_work
 from project.use_cases.member import (
     change_member_role,
     get_members,
@@ -196,3 +196,9 @@ def create_project_members_router(
             return handle_project_error(error)
 
     return router
+
+
+router = create_project_members_router(
+    create_project_unit_of_work,
+    create_identity_client,
+)

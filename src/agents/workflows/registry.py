@@ -5,7 +5,7 @@ from types import ModuleType
 import agents.workflows as workflows_package
 from agents.llm_engine.base import ILLMEngine
 from agents.workflows.base import WorkflowExecution
-from core.logs import get_logger
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

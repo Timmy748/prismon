@@ -5,8 +5,8 @@ from typing import Protocol
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 
-from core.logs import get_logger
-from identity.settings import get_settings
+from infra.logs import get_logger
+from infra.settings import get_settings
 
 logger = get_logger(__name__)
 

@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from core.logs import get_logger
-from identity.settings import get_settings
+from infra.logs import get_logger
+from infra.settings import get_settings
 
 logger = get_logger(__name__)
 

@@ -2,11 +2,11 @@
 
 from collections.abc import Callable
 
-from core.logs import get_logger
 from identity.dtos.user import UserDTO
 from identity.security.jwt import ITokenProvider
 from identity.unit_of_work import IIdentityUnitOfWork
 from identity.use_cases.user import get_current_user, get_user_by_id
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

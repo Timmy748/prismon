@@ -9,7 +9,7 @@ from agents.entities.registry import mapper_registry
 from agents.entities.chat import Chat
 from agents.entities.message import Message
 from agents.entities.workflow import Workflow 
-from agents.settings import get_settings
+from infra.settings import get_settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

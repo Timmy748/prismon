@@ -1,7 +1,7 @@
 # ruff: noqa: PLR0913, PLR0917
 from uuid import uuid4
 
-from core.logs import get_logger
+from infra.logs import get_logger
 from project.dtos.asset import (
     ApproveAssetDTO,
     AssetDTO,

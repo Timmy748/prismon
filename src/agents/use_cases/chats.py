@@ -23,10 +23,10 @@ from agents.exceptions import (
 )
 from agents.llm_engine.base import GenerationChunk, GenerationFinal
 from agents.llm_engine.factory import create_llm_engine
-from agents.settings import get_settings
 from agents.unit_of_work import IAgentsUnitOfWork
 from agents.workflows.registry import workflow_registry_factory
-from core.logs import get_logger
+from infra.logs import get_logger
+from infra.settings import get_settings
 from project.permissions import ProjectPermission
 
 logger = get_logger(__name__)

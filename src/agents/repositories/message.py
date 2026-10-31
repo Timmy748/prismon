@@ -7,7 +7,7 @@ from agents.dtos.message import MessageDTO
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.entities.message import Message, SenderType
 from agents.exceptions import MessageNotFoundException
-from core.logs import get_logger
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

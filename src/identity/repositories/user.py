@@ -3,10 +3,10 @@ from typing import Protocol
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.logs import get_logger
 from identity.dtos.user import UserDTO
 from identity.entities.user import User
 from identity.exceptions import UserNotFoundException
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

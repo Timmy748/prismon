@@ -6,7 +6,6 @@ from agents.exceptions import (
     UserAuthenticationException,
     UserNotFoundException,
 )
-from core.logs import get_logger
 from identity.dtos.user import UserDTO as IdentityUserDTO
 from identity.exceptions import (
     IdentityException,
@@ -20,6 +19,7 @@ from identity.exceptions import (
 from identity.public_api import IdentityPublicAPI
 from identity.security.jwt import create_token_provider
 from identity.unit_of_work import create_identity_unit_of_work
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

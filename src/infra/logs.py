@@ -12,7 +12,7 @@ from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import Resource
 
-from core.settings import get_settings
+from infra.settings import get_settings
 
 _setup_lock = Lock()
 _configured = Event()

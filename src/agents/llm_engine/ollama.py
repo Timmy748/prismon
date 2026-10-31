@@ -4,8 +4,8 @@ from langchain_ollama import ChatOllama
 
 from agents.llm_engine.base import GenerationMetadata
 from agents.llm_engine.langchain_base import LangChainEngine
-from agents.settings import get_settings
-from core.logs import get_logger
+from infra.logs import get_logger
+from infra.settings import get_settings
 
 logger = get_logger(__name__)
 

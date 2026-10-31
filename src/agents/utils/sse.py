@@ -3,7 +3,7 @@ from typing import Any
 
 from fastapi.encoders import jsonable_encoder
 
-from core.logs import get_logger
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 

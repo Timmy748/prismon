@@ -12,7 +12,7 @@ from agents.unit_of_work import (
 )
 from agents.use_cases.workflows import get_workflows
 from agents.utils.pagination import encode_cursor, pagination_dto
-from core.logs import get_logger
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 
@@ -48,3 +48,6 @@ def create_workflow_routes(
         return result
 
     return router
+
+
+router = create_workflow_routes()

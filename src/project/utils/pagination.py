@@ -6,7 +6,7 @@ from http import HTTPStatus
 from fastapi import HTTPException
 from pydantic import BaseModel
 
-from core.logs import get_logger
+from infra.logs import get_logger
 from project.dtos.page import CursorPage, PaginationDTO
 
 logger = get_logger(__name__)

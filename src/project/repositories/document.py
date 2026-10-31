@@ -4,7 +4,7 @@ from typing import Protocol
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.logs import get_logger
+from infra.logs import get_logger
 from project.dtos.document import DocumentDTO
 from project.dtos.page import CursorPage, PaginationDTO
 from project.entities.document import Document, DocumentStatus

@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Protocol
 
-from core.logs import get_logger
+from infra.logs import get_logger
 from project.entities.member import MemberRole
 
 logger = get_logger(__name__)

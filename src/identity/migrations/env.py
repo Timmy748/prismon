@@ -8,7 +8,7 @@ from alembic import context
 from identity.entities.registry import mapper_registry
 from identity.entities.user import User
 from identity.entities.token import RefreshToken
-from identity.settings import get_settings
+from infra.settings import get_settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

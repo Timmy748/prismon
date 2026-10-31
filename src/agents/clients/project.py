@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Protocol
 
 from agents.exceptions import ApiKeyNotFoundException
-from core.logs import get_logger
+from infra.logs import get_logger
 from project.dtos.page import PaginationDTO
 from project.entities.member import MemberRole, MemberStatus
 from project.exceptions import (

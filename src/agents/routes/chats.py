@@ -6,8 +6,8 @@ from http import HTTPStatus
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from agents.clients.identity import IIdentityClient
-from agents.clients.project import IProjectClient
+from agents.clients.identity import IIdentityClient, create_identity_client
+from agents.clients.project import IProjectClient, create_project_client
 from agents.dtos.chat import (
     ChatDTO,
     CreateChatDTO,
@@ -22,7 +22,10 @@ from agents.handlers.errors import handle_agents_error
 from agents.schemas.chat import ChatSchema, UpdateChatTitleSchema
 from agents.schemas.message import CreateMessageSchema, MessageSchema
 from agents.schemas.page import PageSchema
-from agents.unit_of_work import IAgentsUnitOfWork
+from agents.unit_of_work import (
+    IAgentsUnitOfWork,
+    create_agents_unit_of_work,
+)
 from agents.use_cases.chats import (
     create_chat,
     delete_chat,
@@ -33,7 +36,7 @@ from agents.use_cases.chats import (
 )
 from agents.utils.pagination import encode_cursor, pagination_dto
 from agents.utils.sse import format_sse
-from core.logs import get_logger
+from infra.logs import get_logger
 
 logger = get_logger(__name__)
 
@@ -305,3 +308,10 @@ def create_chat_routes(  # noqa: PLR0915
             return handle_agents_error(error)
 
     return router
+
+
+router = create_chat_routes(
+    create_agents_unit_of_work,
+    create_identity_client,
+    create_project_client,
+)

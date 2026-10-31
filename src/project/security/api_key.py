@@ -6,7 +6,7 @@ from typing import Protocol
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from project.settings import get_settings
+from infra.settings import get_settings
 
 _NONCE_SIZE = 12
 _KEY_SIZE = 32
