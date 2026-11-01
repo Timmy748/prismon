@@ -17,6 +17,7 @@ from project.exceptions import (
     ProjectUserAuthenticationException,
     ProjectUserNotFoundException,
     ProjectUserServiceException,
+    TagNotFoundException,
 )
 
 logger = get_logger(__name__)
@@ -27,6 +28,7 @@ DOMAIN_ERROR_STATUS: dict[type[ProjectException], HTTPStatus] = {
     MemberNotFoundException: HTTPStatus.NOT_FOUND,
     DocumentNotFoundException: HTTPStatus.NOT_FOUND,
     AssetNotFoundException: HTTPStatus.NOT_FOUND,
+    TagNotFoundException: HTTPStatus.NOT_FOUND,
     ProjectUserNotFoundException: HTTPStatus.NOT_FOUND,
     MemberAlreadyExistsException: HTTPStatus.CONFLICT,
     InvalidInvitationStateException: HTTPStatus.CONFLICT,

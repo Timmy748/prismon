@@ -7,6 +7,7 @@ from project.repositories.asset import IAssetRepository
 from project.repositories.document import IDocumentRepository
 from project.repositories.member import IMemberRepository
 from project.repositories.project import IProjectRepository
+from project.repositories.tag import ITagRepository
 
 
 @pytest.fixture
@@ -20,11 +21,13 @@ def uow_dependencies(monkeypatch):
     member_repository = Mock(spec=IMemberRepository)
     document_repository = Mock(spec=IDocumentRepository)
     asset_repository = Mock(spec=IAssetRepository)
+    tag_repository = Mock(spec=ITagRepository)
     constructors = (
         ('ProjectRepository', project_repository),
         ('MemberRepository', member_repository),
         ('DocumentRepository', document_repository),
         ('AssetRepository', asset_repository),
+        ('TagRepository', tag_repository),
     )
     monkeypatch.setattr(
         unit_of_work_module,
@@ -44,4 +47,5 @@ def uow_dependencies(monkeypatch):
         member_repository,
         document_repository,
         asset_repository,
+        tag_repository,
     )

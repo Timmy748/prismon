@@ -3,10 +3,12 @@ from typing import Protocol
 
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from infra.logs import get_logger
 from project.dtos.asset import AssetDTO
 from project.dtos.page import CursorPage, PaginationDTO
+from project.dtos.tag import TagDTO
 from project.entities.asset import Asset, AssetStatus
 
 logger = get_logger(__name__)
@@ -54,11 +56,23 @@ class AssetRepository:
             row.status,
             row.created_at,
             row.updated_at,
+            [
+                TagDTO(
+                    id=tag.id,
+                    project_id=tag.project_id,
+                    label=tag.label,
+                    description=tag.description,
+                    color=tag.color,
+                )
+                for tag in row.tags
+            ],
         )
 
     async def get_asset(self, asset_id: int) -> AssetDTO | None:
         logger.debug('Loading asset repository record: asset_id=%s', asset_id)
-        row = await self._session.get(Asset, asset_id)
+        row = await self._session.get(
+            Asset, asset_id, options=[selectinload(Asset.tags)]
+        )
         return self._to_dto(row) if row else None
 
     async def get_assets(
@@ -72,7 +86,11 @@ class AssetRepository:
             'Listing asset repository records: project_id=%s', project_id
         )
         limit = max(1, min(pagination.limit, 100))
-        stmt = select(Asset).where(Asset.project_id == project_id)
+        stmt = (
+            select(Asset)
+            .options(selectinload(Asset.tags))
+            .where(Asset.project_id == project_id)
+        )
         if pagination.cursor is not None:
             stmt = stmt.where(
                 tuple_(Asset.updated_at, Asset.id)
@@ -124,6 +142,7 @@ class AssetRepository:
         self._session.add(row)
         await self._session.flush()
         await self._session.refresh(row)
+        row.tags = []
         return self._to_dto(row)
 
     async def update_asset(
@@ -135,7 +154,9 @@ class AssetRepository:
         status: AssetStatus | None = None,
     ) -> AssetDTO | None:
         logger.debug('Updating asset repository record: asset_id=%s', asset_id)
-        row = await self._session.get(Asset, asset_id)
+        row = await self._session.get(
+            Asset, asset_id, options=[selectinload(Asset.tags)]
+        )
         if row is None:
             return None
         if file is not None:

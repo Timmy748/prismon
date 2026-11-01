@@ -3,9 +3,10 @@ from enum import Enum
 from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, Index, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from project.entities.registry import mapper_registry
+from project.entities.tag import Tag, asset_tags
 
 
 class AssetStatus(str, Enum):
@@ -33,6 +34,11 @@ class Asset:
         String(256), default=None
     )
     status: Mapped[AssetStatus] = mapped_column(default=AssetStatus.ACTIVE)
+    tags: Mapped[list[Tag]] = relationship(
+        secondary=asset_tags,
+        lazy='selectin',
+        default_factory=list,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         insert_default=lambda: datetime.now(timezone.utc),

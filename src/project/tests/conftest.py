@@ -10,3 +10,4 @@ from project.tests.fixtures.projects import *  # noqa: F401, F403
 from project.tests.fixtures.public_api import *  # noqa: F401, F403
 from project.tests.fixtures.repositories import *  # noqa: F401, F403
 from project.tests.fixtures.rustfs_storage import *  # noqa: F401, F403
+from project.tests.fixtures.tags import *  # noqa: F401, F403

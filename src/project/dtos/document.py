@@ -1,6 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
+from project.dtos.tag import TagDTO
 from project.entities.document import DocumentStatus
 
 
@@ -14,6 +15,7 @@ class DocumentDTO:
     status: DocumentStatus
     created_at: datetime
     updated_at: datetime
+    tags: list[TagDTO] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

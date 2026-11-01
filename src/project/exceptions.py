@@ -52,6 +52,12 @@ class AssetNotFoundException(ProjectException):
         super().__init__(f'Asset {asset_id} not found')
 
 
+class TagNotFoundException(ProjectException):
+    def __init__(self, tag_id: int) -> None:
+        self.tag_id = tag_id
+        super().__init__(f'Tag {tag_id} not found')
+
+
 class ApiKeyNotFoundException(ProjectException):
     def __init__(self, api_key_id: int) -> None:
         self.api_key_id = api_key_id

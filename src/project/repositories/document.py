@@ -3,10 +3,12 @@ from typing import Protocol
 
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from infra.logs import get_logger
 from project.dtos.document import DocumentDTO
 from project.dtos.page import CursorPage, PaginationDTO
+from project.dtos.tag import TagDTO
 from project.entities.document import Document, DocumentStatus
 
 logger = get_logger(__name__)
@@ -54,13 +56,25 @@ class DocumentRepository:
             row.status,
             row.created_at,
             row.updated_at,
+            [
+                TagDTO(
+                    id=tag.id,
+                    project_id=tag.project_id,
+                    label=tag.label,
+                    description=tag.description,
+                    color=tag.color,
+                )
+                for tag in row.tags
+            ],
         )
 
     async def get_document(self, document_id: int) -> DocumentDTO | None:
         logger.debug(
             'Loading document repository record: document_id=%s', document_id
         )
-        row = await self._session.get(Document, document_id)
+        row = await self._session.get(
+            Document, document_id, options=[selectinload(Document.tags)]
+        )
         return self._to_dto(row) if row else None
 
     async def get_documents(
@@ -74,7 +88,11 @@ class DocumentRepository:
             'Listing document repository records: project_id=%s', project_id
         )
         limit = max(1, min(pagination.limit, 100))
-        stmt = select(Document).where(Document.project_id == project_id)
+        stmt = (
+            select(Document)
+            .options(selectinload(Document.tags))
+            .where(Document.project_id == project_id)
+        )
         if pagination.cursor is not None:
             stmt = stmt.where(
                 tuple_(Document.updated_at, Document.id)
@@ -126,6 +144,7 @@ class DocumentRepository:
         self._session.add(row)
         await self._session.flush()
         await self._session.refresh(row)
+        row.tags = []
         return self._to_dto(row)
 
     async def update_document(
@@ -139,7 +158,9 @@ class DocumentRepository:
         logger.debug(
             'Updating document repository record: document_id=%s', document_id
         )
-        row = await self._session.get(Document, document_id)
+        row = await self._session.get(
+            Document, document_id, options=[selectinload(Document.tags)]
+        )
         if row is None:
             return None
         if file is not None:

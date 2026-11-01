@@ -13,6 +13,7 @@ from project.repositories.document import (
 )
 from project.repositories.member import IMemberRepository, MemberRepository
 from project.repositories.project import IProjectRepository, ProjectRepository
+from project.repositories.tag import ITagRepository, TagRepository
 
 logger = get_logger(__name__)
 
@@ -46,6 +47,9 @@ class IProjectUnitOfWork(Protocol):
     @property
     def asset_repository(self) -> IAssetRepository: ...
 
+    @property
+    def tag_repository(self) -> ITagRepository: ...
+
 
 class UnitOfWork(IProjectUnitOfWork):
     def __init__(self) -> None:
@@ -55,6 +59,7 @@ class UnitOfWork(IProjectUnitOfWork):
         self._member_repository: IMemberRepository | None = None
         self._document_repository: IDocumentRepository | None = None
         self._asset_repository: IAssetRepository | None = None
+        self._tag_repository: ITagRepository | None = None
 
     async def __aenter__(self) -> 'UnitOfWork':
         if self._session is not None:
@@ -67,6 +72,7 @@ class UnitOfWork(IProjectUnitOfWork):
         self._member_repository = MemberRepository(self._session)
         self._document_repository = DocumentRepository(self._session)
         self._asset_repository = AssetRepository(self._session)
+        self._tag_repository = TagRepository(self._session)
         return self
 
     async def __aexit__(
@@ -93,6 +99,7 @@ class UnitOfWork(IProjectUnitOfWork):
             self._member_repository = None
             self._document_repository = None
             self._asset_repository = None
+            self._tag_repository = None
             await session.close()
             logger.debug('Project unit of work closed')
 
@@ -133,6 +140,12 @@ class UnitOfWork(IProjectUnitOfWork):
         if self._asset_repository is None:
             raise RuntimeError('UnitOfWork context is not active')
         return self._asset_repository
+
+    @property
+    def tag_repository(self) -> ITagRepository:
+        if self._tag_repository is None:
+            raise RuntimeError('UnitOfWork context is not active')
+        return self._tag_repository
 
     def _active_session(self) -> AsyncSession:
         if self._session is None:

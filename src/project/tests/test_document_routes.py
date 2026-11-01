@@ -108,6 +108,7 @@ async def test_list_documents_returns_page(document_client):
     )
     assert response.status_code == 200
     assert response.json()['items'][0]['id'] == 4
+    assert response.json()['items'][0]['tags'][0]['id'] == 9
     assert response.json()['limit'] == 10
     assert response.json()['more'] is False
     assert response.json()['cursor'] is None
