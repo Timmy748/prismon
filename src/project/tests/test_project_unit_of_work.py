@@ -18,6 +18,7 @@ async def test_unit_of_work_binds_all_repositories_to_one_session(
         member_repository,
         document_repository,
         asset_repository,
+        tag_repository,
     ) = uow_dependencies
     unit_of_work = UnitOfWork()
 
@@ -27,11 +28,13 @@ async def test_unit_of_work_binds_all_repositories_to_one_session(
         assert unit_of_work.member_repository is member_repository
         assert unit_of_work.document_repository is document_repository
         assert unit_of_work.asset_repository is asset_repository
+        assert unit_of_work.tag_repository is tag_repository
         for name, repository in (
             ('ProjectRepository', project_repository),
             ('MemberRepository', member_repository),
             ('DocumentRepository', document_repository),
             ('AssetRepository', asset_repository),
+            ('TagRepository', tag_repository),
         ):
             getattr(unit_of_work_module, name).assert_called_once_with(session)
 
@@ -89,6 +92,7 @@ async def test_unit_of_work_rejects_reentry(uow_dependencies):
         'member_repository',
         'document_repository',
         'asset_repository',
+        'tag_repository',
     ],
 )
 def test_unit_of_work_repository_is_unavailable_outside_context(

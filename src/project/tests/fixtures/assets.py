@@ -11,6 +11,7 @@ from project.dtos.asset import AssetDTO
 from project.dtos.member import MemberDTO
 from project.dtos.page import CursorPage, PaginationDTO
 from project.dtos.project import ProjectDTO
+from project.dtos.tag import TagDTO
 from project.dtos.user import UserDTO
 from project.entities.asset import AssetStatus
 from project.entities.member import MemberRole, MemberStatus
@@ -42,6 +43,7 @@ def asset_api():
         AssetStatus.ACTIVE,
         now,
         now,
+        [TagDTO(9, 2, 'Brand', 'Branding', '#AABBCC')],
     )
     user_client.get_current_user.return_value = user
     project_repo.get_project.return_value = project

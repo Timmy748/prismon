@@ -6,6 +6,7 @@ from project.repositories.asset import IAssetRepository
 from project.repositories.document import IDocumentRepository
 from project.repositories.member import IMemberRepository
 from project.repositories.project import IProjectRepository
+from project.repositories.tag import ITagRepository
 from project.storage import IStorage
 from project.unit_of_work import IProjectUnitOfWork
 
@@ -15,6 +16,7 @@ def make_unit_of_work(
     member_repo=None,
     document_repo=None,
     asset_repo=None,
+    tag_repo=None,
 ):
     unit_of_work = MagicMock(spec=IProjectUnitOfWork)
     unit_of_work.project_repository = project_repo or AsyncMock(
@@ -29,6 +31,7 @@ def make_unit_of_work(
     unit_of_work.asset_repository = asset_repo or AsyncMock(
         spec=IAssetRepository
     )
+    unit_of_work.tag_repository = tag_repo or AsyncMock(spec=ITagRepository)
     unit_of_work.commit = AsyncMock()
     unit_of_work.rollback = AsyncMock()
     unit_of_work.__aenter__ = AsyncMock(return_value=unit_of_work)
@@ -57,12 +60,19 @@ def mock_asset_repo():
 
 
 @pytest.fixture
+def mock_tag_repo():
+    return AsyncMock(spec=ITagRepository)
+
+
+@pytest.fixture
 def mock_storage():
     return Mock(spec=IStorage)
 
 
 @pytest.fixture
-def unit_of_work(project_repo, member_repo, document_repo, asset_repo):
+def unit_of_work(
+    project_repo, member_repo, document_repo, asset_repo, mock_tag_repo
+):
     return make_unit_of_work(
-        project_repo, member_repo, document_repo, asset_repo
+        project_repo, member_repo, document_repo, asset_repo, mock_tag_repo
     )

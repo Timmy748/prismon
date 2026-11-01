@@ -15,6 +15,7 @@ from project.routes.assets import router as assets_router
 from project.routes.documents import router as documents_router
 from project.routes.members import router as members_router
 from project.routes.projects import router as projects_router
+from project.routes.tags import router as tags_router
 
 logger = get_logger(__name__)
 
@@ -48,6 +49,7 @@ for router in (
     workflows_router,
     user_router,
     projects_router,
+    tags_router,
     members_router,
     api_keys_router,
     documents_router,

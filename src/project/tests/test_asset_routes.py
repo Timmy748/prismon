@@ -21,6 +21,7 @@ async def test_list_assets_returns_page_and_passes_filters(
     )
     assert response.status_code == HTTPStatus.OK
     assert response.json()['items'][0]['id'] == 4
+    assert response.json()['items'][0]['tags'][0]['id'] == 9
     assert response.json()['limit'] == 10
     assert response.json()['more'] is False
     asset_api[3].get_assets.assert_awaited_once()

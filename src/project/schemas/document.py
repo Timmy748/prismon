@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from project.dtos.document import DocumentDTO
 from project.entities.document import DocumentStatus
+from project.schemas.tag import TagSchema
 from project.utils.pagination import PageSchema
 
 
@@ -16,6 +17,7 @@ class DocumentSchema(BaseModel):
     status: DocumentStatus
     created_at: datetime
     updated_at: datetime
+    tags: list[TagSchema] = Field(default_factory=list)
 
     @classmethod
     def from_dto(cls, dto: DocumentDTO) -> 'DocumentSchema':

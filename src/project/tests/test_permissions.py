@@ -22,6 +22,7 @@ from project.permissions import ProjectPermission, has_permission
                 ProjectPermission.DOCUMENT_DELETE,
                 ProjectPermission.ASSET_CREATE,
                 ProjectPermission.ASSET_READ,
+                ProjectPermission.TAG_READ,
             },
         ),
         (
@@ -31,6 +32,7 @@ from project.permissions import ProjectPermission, has_permission
                 ProjectPermission.CHAT_READ,
                 ProjectPermission.DOCUMENT_READ,
                 ProjectPermission.ASSET_READ,
+                ProjectPermission.TAG_READ,
             },
         ),
     ],

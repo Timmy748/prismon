@@ -11,6 +11,7 @@ from project.entities.member import Member
 from project.entities.document import Document
 from project.entities.asset import Asset
 from project.entities.api_key import ApiKey
+from project.entities.tag import Tag, asset_tags, document_tags
 from infra.settings import get_settings
 
 

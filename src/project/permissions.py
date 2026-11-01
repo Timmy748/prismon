@@ -26,6 +26,12 @@ class ProjectPermission(str, Enum):
     ASSET_READ = 'asset:read'
     ASSET_UPDATE = 'asset:update'
     ASSET_APPROVE = 'asset:approve'
+    TAG_READ = 'tag:read'
+    TAG_CREATE = 'tag:create'
+    TAG_UPDATE = 'tag:update'
+    TAG_DELETE = 'tag:delete'
+    ASSET_TAG_ASSIGN = 'asset:tag:assign'
+    DOCUMENT_TAG_ASSIGN = 'document:tag:assign'
     WORKFLOW_USE = 'workflow:use'
 
 
@@ -50,6 +56,7 @@ _ROLE_PERMISSIONS: dict[MemberRole, frozenset[ProjectPermission]] = {
             ProjectPermission.DOCUMENT_DELETE,
             ProjectPermission.ASSET_CREATE,
             ProjectPermission.ASSET_READ,
+            ProjectPermission.TAG_READ,
         }
     ),
     MemberRole.COLLABORATOR: frozenset(
@@ -58,6 +65,7 @@ _ROLE_PERMISSIONS: dict[MemberRole, frozenset[ProjectPermission]] = {
             ProjectPermission.CHAT_READ,
             ProjectPermission.DOCUMENT_READ,
             ProjectPermission.ASSET_READ,
+            ProjectPermission.TAG_READ,
         }
     ),
 }

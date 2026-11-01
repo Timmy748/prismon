@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from project.dtos.asset import AssetDTO
 from project.entities.asset import AssetStatus
+from project.schemas.tag import TagSchema
 from project.utils.pagination import PageSchema
 
 
@@ -16,6 +17,7 @@ class AssetSchema(BaseModel):
     status: AssetStatus
     created_at: datetime
     updated_at: datetime
+    tags: list[TagSchema] = Field(default_factory=list)
 
     @classmethod
     def from_dto(cls, dto: AssetDTO) -> 'AssetSchema':
