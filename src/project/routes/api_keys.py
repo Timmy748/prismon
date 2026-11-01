@@ -4,6 +4,7 @@ from http import HTTPStatus
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
+from infra.logs import get_logger
 from project.clients.client_user import IUserClient, create_identity_client
 from project.dtos.api_key_hint import ApiKeyHintDTO
 from project.exceptions import (
@@ -25,6 +26,8 @@ from project.use_cases.api_key import (
     list_project_api_keys,
 )
 from project.utils.pagination import PageSchema, page_schema, pagination_dto
+
+logger = get_logger(__name__)
 
 
 def create_api_keys_router(
@@ -52,10 +55,15 @@ def create_api_keys_router(
     async def post_member_api_key(
         request: Request, project_id: int, data: CreateApiKeySchema
     ) -> ApiKeyHintDTO | JSONResponse:
+        logger.info(
+            'Project API key route started: '
+            'operation=create_member project_id=%s',
+            project_id,
+        )
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as uow:
-                return await create_member_api_key(
+                result = await create_member_api_key(
                     uow,
                     project_id,
                     user.id,
@@ -63,6 +71,13 @@ def create_api_keys_router(
                     data.api_key.get_secret_value(),
                     encryption_factory(),
                 )
+            logger.info(
+                'Project API key route completed: '
+                'operation=create_member project_id=%s api_key_id=%s',
+                project_id,
+                result.id,
+            )
+            return result
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -75,13 +90,25 @@ def create_api_keys_router(
         limit: int = Query(default=50, ge=1, le=100),
         cursor: str | None = None,
     ) -> PageSchema[ApiKeyHintDTO] | JSONResponse:
+        logger.info(
+            'Project API key route started: '
+            'operation=list_member project_id=%s',
+            project_id,
+        )
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as uow:
                 page = await list_member_api_keys(
                     uow, project_id, user.id, pagination_dto(cursor, limit)
                 )
-                return page_schema(page)
+                result = page_schema(page)
+            logger.info(
+                'Project API key route completed: '
+                'operation=list_member project_id=%s item_count=%s',
+                project_id,
+                len(page.items),
+            )
+            return result
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -93,10 +120,15 @@ def create_api_keys_router(
     async def post_project_api_key(
         request: Request, project_id: int, data: CreateApiKeySchema
     ) -> ApiKeyHintDTO | JSONResponse:
+        logger.info(
+            'Project API key route started: '
+            'operation=create_project project_id=%s',
+            project_id,
+        )
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as uow:
-                return await create_project_api_key(
+                result = await create_project_api_key(
                     uow,
                     project_id,
                     user.id,
@@ -104,6 +136,13 @@ def create_api_keys_router(
                     data.api_key.get_secret_value(),
                     encryption_factory(),
                 )
+            logger.info(
+                'Project API key route completed: '
+                'operation=create_project project_id=%s api_key_id=%s',
+                project_id,
+                result.id,
+            )
+            return result
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -114,13 +153,25 @@ def create_api_keys_router(
         limit: int = Query(default=50, ge=1, le=100),
         cursor: str | None = None,
     ) -> PageSchema[ApiKeyHintDTO] | JSONResponse:
+        logger.info(
+            'Project API key route started: '
+            'operation=list_project project_id=%s',
+            project_id,
+        )
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as uow:
                 page = await list_project_api_keys(
                     uow, project_id, user.id, pagination_dto(cursor, limit)
                 )
-                return page_schema(page)
+                result = page_schema(page)
+            logger.info(
+                'Project API key route completed: '
+                'operation=list_project project_id=%s item_count=%s',
+                project_id,
+                len(page.items),
+            )
+            return result
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -132,11 +183,23 @@ def create_api_keys_router(
     async def remove_api_key(
         request: Request, project_id: int, api_key_id: int
     ) -> JSONResponse | None:
+        logger.info(
+            'Project API key route started: '
+            'operation=delete project_id=%s api_key_id=%s',
+            project_id,
+            api_key_id,
+        )
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as uow:
                 await delete_api_key(uow, project_id, user.id, api_key_id)
-                return None
+            logger.info(
+                'Project API key route completed: '
+                'operation=delete project_id=%s api_key_id=%s',
+                project_id,
+                api_key_id,
+            )
+            return None
         except ProjectException as error:
             return handle_project_error(error)
 

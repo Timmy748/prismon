@@ -4,9 +4,12 @@ from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from infra.logs import get_logger
 from project.dtos.api_key import ApiKeyDTO, CreateApiKeyDTO
 from project.dtos.page import CursorPage, PaginationDTO
 from project.entities.api_key import ApiKey
+
+logger = get_logger(__name__)
 
 
 class IApiKeyRepository(Protocol):
@@ -54,10 +57,23 @@ class ApiKeyRepository:
         self._session.add(row)
         await self._session.flush()
         await self._session.refresh(row)
+        logger.debug(
+            'API key repository create completed: '
+            'api_key_id=%s member_id=%s project_id=%s provider=%s',
+            row.id,
+            row.member_id,
+            row.project_id,
+            row.provider.value,
+        )
         return self._to_dto(row)
 
     async def get_api_key(self, api_key_id: int) -> ApiKeyDTO | None:
         row = await self._session.get(ApiKey, api_key_id)
+        logger.debug(
+            'API key repository lookup completed: api_key_id=%s found=%s',
+            api_key_id,
+            row is not None,
+        )
         return self._to_dto(row) if row is not None else None
 
     async def _list_api_keys(
@@ -84,6 +100,12 @@ class ApiKeyRepository:
         more = len(rows) > limit
         rows = rows[:limit]
         cursor = (rows[-1].created_at, rows[-1].id) if more and rows else None
+        logger.debug(
+            'API key repository listing completed: count=%s more=%s limit=%s',
+            len(rows),
+            more,
+            limit,
+        )
         return CursorPage(
             [self._to_dto(row) for row in rows],
             PaginationDTO(cursor=cursor, limit=limit, more=more),
@@ -92,6 +114,10 @@ class ApiKeyRepository:
     async def list_member_api_keys(
         self, member_id: int, pagination: PaginationDTO = PaginationDTO()
     ) -> CursorPage[ApiKeyDTO]:
+        logger.debug(
+            'API key repository member listing started: member_id=%s',
+            member_id,
+        )
         return await self._list_api_keys(
             ApiKey.member_id == member_id, pagination
         )
@@ -99,6 +125,10 @@ class ApiKeyRepository:
     async def list_project_api_keys(
         self, project_id: int, pagination: PaginationDTO = PaginationDTO()
     ) -> CursorPage[ApiKeyDTO]:
+        logger.debug(
+            'API key repository project listing started: project_id=%s',
+            project_id,
+        )
         return await self._list_api_keys(
             ApiKey.project_id == project_id, pagination
         )
@@ -108,3 +138,8 @@ class ApiKeyRepository:
         if row is not None:
             await self._session.delete(row)
             await self._session.flush()
+        logger.debug(
+            'API key repository delete completed: api_key_id=%s found=%s',
+            api_key_id,
+            row is not None,
+        )
