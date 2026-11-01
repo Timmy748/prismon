@@ -47,14 +47,27 @@ class ProjectPublicAPI:
     async def get_api_key(
         self, project_id: int, user_id: int, api_key_id: int
     ) -> str:
+        logger.debug(
+            'Public API key retrieval started: '
+            'project_id=%s user_id=%s api_key_id=%s',
+            project_id,
+            user_id,
+            api_key_id,
+        )
         async with self.unit_of_work_factory() as unit_of_work:
-            return await get_api_key(
+            api_key = await get_api_key(
                 uow=unit_of_work,
                 project_id=project_id,
                 user_id=user_id,
                 api_key_id=api_key_id,
                 encryptor=self.encryption_factory(),
             )
+        logger.debug(
+            'Public API key retrieval completed: project_id=%s api_key_id=%s',
+            project_id,
+            api_key_id,
+        )
+        return api_key
 
     async def get_documents(
         self,
