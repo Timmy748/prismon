@@ -26,6 +26,7 @@ def test_setup_log_exports_each_record_once_and_is_idempotent(
     initial_handlers = list(root_logger.handlers)
     initial_level = root_logger.level
     settings = SimpleNamespace(
+        APP_LOG_LEVEL='DEBUG',
         OTEL_SERVICE_NAME='infra-test-service',
         OTEL_EXPORTER_OTLP_LOGS_ENDPOINT='http://collector:4317',
         OTEL_EXPORTER_OTLP_ENDPOINT='http://fallback:4317',
@@ -47,7 +48,7 @@ def test_setup_log_exports_each_record_once_and_is_idempotent(
         logs.setup_log()
         logs.setup_log()
 
-        logs.get_logger('infra.tests.export').info('one exported record')
+        logs.get_logger('infra.tests.export').debug('one exported record')
         provider = logs._logs.get_logger_provider()
         assert provider.force_flush()
 
@@ -60,9 +61,11 @@ def test_setup_log_exports_each_record_once_and_is_idempotent(
             enable_log_auto_instrumentation=False,
         )
         assert len(root_logger.handlers) == len(initial_handlers) + 1
+        assert root_logger.level == logging.DEBUG
         assert len(memory_log_exporter.records) == 1
         exported_record = memory_log_exporter.records[0]
         assert exported_record.log_record.body == 'one exported record'
+        assert exported_record.log_record.severity_text == 'DEBUG'
         assert exported_record.resource.attributes['service.name'] == (
             'infra-test-service'
         )

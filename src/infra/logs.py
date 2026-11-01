@@ -24,6 +24,11 @@ def setup_log() -> None:
             return
 
         settings = get_settings()
+        level_name = settings.APP_LOG_LEVEL.upper()
+        level = logging.getLevelNamesMapping().get(level_name)
+        if level is None:
+            raise ValueError(f'Unsupported application log level: {level_name}')
+
         provider = LoggerProvider(
             resource=Resource.create(
                 {'service.name': settings.OTEL_SERVICE_NAME}
@@ -44,9 +49,9 @@ def setup_log() -> None:
             enable_log_auto_instrumentation=False,
         )
         root_logger = logging.getLogger()
-        root_logger.setLevel(logging.INFO)
+        root_logger.setLevel(level)
         root_logger.addHandler(
-            LoggingHandler(level=logging.INFO, logger_provider=provider)
+            LoggingHandler(level=level, logger_provider=provider)
         )
         _configured.set()
 

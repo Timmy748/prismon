@@ -72,6 +72,8 @@ def set_required_project_environment(monkeypatch):
     def set_environment(ttl_seconds):
         environment = {
             'DATABASE_URL': 'postgresql+psycopg://test:test@localhost/test',
+            'CELERY_BROKER_URL': 'amqp://celery:celery@rabbitmq:5672//',
+            'CELERY_RESULT_BACKEND': 'redis://redis:6379/0',
             'RUSTFS_ENDPOINT_URL': 'http://rustfs:9000',
             'RUSTFS_PUBLIC_ENDPOINT_URL': 'http://localhost:9000',
             'RUSTFS_BUCKET': 'test-bucket',

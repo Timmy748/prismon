@@ -13,6 +13,10 @@ services:
     depends_on:
       postgres_db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
       rustfs:
         condition: service_healthy
       otel_collector:
@@ -34,6 +38,77 @@ services:
       interval: 3s
       timeout: 3s
       retries: 5
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--appendonly", "yes",
+        "--user", "default", "off",
+        "--user", "${REDIS_USERNAME}", "on", ">${REDIS_PASSWORD}", "~*", "&*", "+@all"
+      ]
+    environment:
+      REDIS_USERNAME: ${REDIS_USERNAME}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-u", "redis://${REDIS_USERNAME}:${REDIS_PASSWORD}@redis:6379/0", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  celery_worker_short:
+    image: prismon_api
+    build:
+      context: .
+      dockerfile: dockerfile
+    entrypoint: ["celery", "-A", "infra.celery_app:celery_app", "worker", "--queues=short_tasks", "--hostname=short@%h"]
+    env_file: .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres_db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery_worker_long:
+    image: prismon_api
+    build:
+      context: .
+      dockerfile: dockerfile
+    entrypoint: ["celery", "-A", "infra.celery_app:celery_app", "worker", "--queues=long_tasks", "--hostname=long@%h"]
+    env_file: .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres_db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   rustfs:
     image: rustfs/rustfs:latest
@@ -83,4 +158,8 @@ volumes:
     name: ollama_data
   rustfs_data:
     name: rustfs_data
+  rabbitmq_data:
+    name: rabbitmq_data
+  redis_data:
+    name: redis_data
 
