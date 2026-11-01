@@ -12,7 +12,12 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = field(init=False)
 
+    # Background task processing
+    CELERY_BROKER_URL: str = field(init=False)
+    CELERY_RESULT_BACKEND: str = field(init=False)
+
     # Logging and telemetry
+    APP_LOG_LEVEL: str = 'INFO'
     OTEL_SERVICE_NAME: str = field(init=False)
     OTEL_EXPORTER_OTLP_ENDPOINT: str = field(init=False)
     OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: str = field(init=False)

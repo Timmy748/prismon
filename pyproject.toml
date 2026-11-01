@@ -24,6 +24,7 @@ dependencies = [
   "opentelemetry-exporter-otlp-proto-grpc>=1.39.0",
   "opentelemetry-instrumentation-logging>=0.60b0",
   "aioboto3>=15.5.0",
+  "celery[redis]>=5.5.3",
 ]
 
 [tool.ruff]
