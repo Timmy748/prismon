@@ -218,7 +218,9 @@ async def test_get_documents_allows_collaborator_read(repos, storage):
 
 
 @pytest.mark.asyncio
-async def test_add_document_saves_bytes_and_sets_member_pending(repos, storage):
+async def test_add_document_saves_bytes_and_sets_member_pending(
+    repos, storage, stub_embedding_enqueue
+):
     project_repo, member_repo, document_repo = repos
     unit_of_work = make_unit_of_work(
         project_repo, member_repo, document_repo=document_repo
@@ -248,6 +250,11 @@ async def test_add_document_saves_bytes_and_sets_member_pending(repos, storage):
         content_type='application/pdf',
     )
     assert result.file == 'old-key'
+    stub_embedding_enqueue.assert_called_once_with(
+        'agents.embeddings.document',
+        args=[result.id],
+        queue='long_tasks',
+    )
 
 
 @pytest.mark.asyncio
@@ -938,13 +945,21 @@ async def test_get_document_events_authorizes_and_forwards_pagination(
 
 
 @pytest.mark.asyncio
-async def test_update_document_records_changed_description(repos, storage):
+async def test_update_document_records_changed_description(
+    repos, storage, stub_embedding_enqueue
+):
     project_repo, member_repo, document_repo = repos
     unit_of_work = make_unit_of_work(
         project_repo, member_repo, document_repo=document_repo
     )
     document_repo.get_document.return_value = _doc()
     document_repo.update_document.return_value = _doc()
+
+    actions = []
+    unit_of_work.commit.side_effect = lambda: actions.append('commit')
+    stub_embedding_enqueue.side_effect = lambda *args, **kwargs: actions.append(
+        'enqueue'
+    )
 
     await update_document(
         unit_of_work,
@@ -960,3 +975,9 @@ async def test_update_document_records_changed_description(repos, storage):
     assert event_call.args[5] == {
         'changes': {'description': {'old': None, 'new': 'Updated description'}}
     }
+    assert actions[-2:] == ['commit', 'enqueue']
+    stub_embedding_enqueue.assert_called_once_with(
+        'agents.embeddings.document',
+        args=[4],
+        queue='long_tasks',
+    )

@@ -1,9 +1,10 @@
-# ruff: noqa: PLR0913, PLR0917
+# ruff: noqa: PLR0912, PLR0913, PLR0917
 from datetime import UTC, datetime, timedelta
 from secrets import token_hex
 
 from infra.logs import get_logger
 from infra.settings import get_settings
+from infra.tasks import TaskQueue, send_task
 from project.dtos.asset import (
     ApproveAssetDTO,
     AssetDTO,
@@ -146,6 +147,11 @@ async def start_asset_upload(
         },
     )
     await uow.commit()
+    send_task(
+        'agents.embeddings.asset',
+        args=[asset.id],
+        queue=TaskQueue.LONG,
+    )
     return AssetUploadDTO(
         asset=asset,
         upload_url=upload_url,
@@ -359,11 +365,16 @@ async def add_asset(
         )
         await uow.commit()
         logger.info('Asset created: project_id=%s', project_id)
-        return asset
     except Exception:
         logger.exception('Asset creation failed: project_id=%s', project_id)
         await storage.delete(key)
         raise
+    send_task(
+        'agents.embeddings.asset',
+        args=[asset.id],
+        queue=TaskQueue.LONG,
+    )
+    return asset
 
 
 async def update_asset(
@@ -463,6 +474,12 @@ async def update_asset(
         raise
     if content is not None and asset.file is not None:
         await storage.delete(asset.file)
+    if 'name' in changes or 'description' in changes:
+        send_task(
+            'agents.embeddings.asset',
+            args=[asset_id],
+            queue=TaskQueue.LONG,
+        )
     return updated
 
 

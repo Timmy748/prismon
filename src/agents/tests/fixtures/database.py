@@ -1,5 +1,6 @@
 import pytest
 import pytest_asyncio
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -13,7 +14,7 @@ from agents.entities.registry import mapper_registry
 
 @pytest.fixture(scope='session')
 def postgres_container():
-    with PostgresContainer('postgres:16-alpine') as postgres:
+    with PostgresContainer('paradedb/paradedb:0.26.4-pg16') as postgres:
         yield postgres
 
 
@@ -26,6 +27,7 @@ async def session(postgres_container):
     engine = create_async_engine(database_url)
 
     async with engine.begin() as connection:
+        await connection.execute(text('CREATE EXTENSION IF NOT EXISTS vector'))
         await connection.run_sync(mapper_registry.metadata.create_all)
 
     session_factory = async_sessionmaker(

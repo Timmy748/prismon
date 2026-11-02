@@ -196,7 +196,9 @@ async def test_asset_access_rejects_missing_permission(asset_dependencies):
 
 
 @pytest.mark.asyncio
-async def test_add_asset_owner_is_active_and_stores_content(asset_dependencies):
+async def test_add_asset_owner_is_active_and_stores_content(
+    asset_dependencies, stub_embedding_enqueue
+):
     project_repo, member_repo, asset_repo, storage, asset = asset_dependencies
     uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     result = await add_asset(
@@ -221,6 +223,11 @@ async def test_add_asset_owner_is_active_and_stores_content(asset_dependencies):
         name='ignored name',
         file_extension=None,
         content_type=None,
+    )
+    stub_embedding_enqueue.assert_called_once_with(
+        'agents.embeddings.asset',
+        args=[result.id],
+        queue='long_tasks',
     )
 
 
@@ -273,10 +280,15 @@ async def test_add_asset_cleans_storage_if_repository_fails(asset_dependencies):
 
 @pytest.mark.asyncio
 async def test_update_asset_replaces_storage_and_updates_metadata(
-    asset_dependencies,
+    asset_dependencies, stub_embedding_enqueue
 ):
     project_repo, member_repo, asset_repo, storage, asset = asset_dependencies
     uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
+    actions = []
+    uow.commit.side_effect = lambda: actions.append('commit')
+    stub_embedding_enqueue.side_effect = lambda *args, **kwargs: actions.append(
+        'enqueue'
+    )
     result = await update_asset(
         uow,
         storage,
@@ -311,11 +323,17 @@ async def test_update_asset_replaces_storage_and_updates_metadata(
         'new': 'New icon',
     }
     storage.delete.assert_awaited_once_with(asset.file)
+    assert actions[-2:] == ['commit', 'enqueue']
+    stub_embedding_enqueue.assert_called_once_with(
+        'agents.embeddings.asset',
+        args=[3],
+        queue='long_tasks',
+    )
 
 
 @pytest.mark.asyncio
 async def test_update_asset_without_content_leaves_storage_unchanged(
-    asset_dependencies,
+    asset_dependencies, stub_embedding_enqueue
 ):
     project_repo, member_repo, asset_repo, storage, _ = asset_dependencies
     uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
@@ -332,6 +350,7 @@ async def test_update_asset_without_content_leaves_storage_unchanged(
     asset_repo.update_asset.assert_awaited_once_with(
         3, file=None, asset_type='icon', description=None
     )
+    stub_embedding_enqueue.assert_not_called()
 
 
 @pytest.mark.asyncio

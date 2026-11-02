@@ -28,7 +28,7 @@ celery_app.conf.update(
     ),
     task_default_delivery_mode='persistent',
     result_extended=True,
-    imports=('project.tasks',),
+    imports=('agents.tasks', 'project.tasks'),
     beat_schedule={
         'expire-stale-project-uploads': {
             'task': 'project.uploads.expire_stale',

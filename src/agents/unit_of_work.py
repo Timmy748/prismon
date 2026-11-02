@@ -4,7 +4,15 @@ from typing import Protocol, Self
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from agents.database import get_session_factory
+from agents.repositories.asset_embedding import (
+    AssetEmbeddingRepository,
+    IAssetEmbeddingRepository,
+)
 from agents.repositories.chat import ChatRepository, IChatRepository
+from agents.repositories.document_embedding import (
+    DocumentEmbeddingRepository,
+    IDocumentEmbeddingRepository,
+)
 from agents.repositories.message import IMessageRepository, MessageRepository
 from agents.repositories.workflow import IWorkflowRepository, WorkflowRepository
 from infra.logs import get_logger
@@ -35,6 +43,14 @@ class IAgentsUnitOfWork(Protocol):
     @property
     def workflow_repository(self) -> IWorkflowRepository: ...
 
+    @property
+    def document_embedding_repository(
+        self,
+    ) -> IDocumentEmbeddingRepository: ...
+
+    @property
+    def asset_embedding_repository(self) -> IAssetEmbeddingRepository: ...
+
 
 class AgentsUnitOfWork(IAgentsUnitOfWork):
     def __init__(
@@ -46,6 +62,12 @@ class AgentsUnitOfWork(IAgentsUnitOfWork):
         self._chat_repository: IChatRepository | None = None
         self._message_repository: IMessageRepository | None = None
         self._workflow_repository: IWorkflowRepository | None = None
+        self._document_embedding_repository: (
+            IDocumentEmbeddingRepository | None
+        ) = None
+        self._asset_embedding_repository: IAssetEmbeddingRepository | None = (
+            None
+        )
 
     async def __aenter__(self) -> 'AgentsUnitOfWork':
         if self._session is not None:
@@ -56,6 +78,12 @@ class AgentsUnitOfWork(IAgentsUnitOfWork):
         self._chat_repository = ChatRepository(self._session)
         self._message_repository = MessageRepository(self._session)
         self._workflow_repository = WorkflowRepository(self._session)
+        self._document_embedding_repository = DocumentEmbeddingRepository(
+            self._session
+        )
+        self._asset_embedding_repository = AssetEmbeddingRepository(
+            self._session
+        )
         logger.debug('Agents unit of work started')
         return self
 
@@ -81,6 +109,8 @@ class AgentsUnitOfWork(IAgentsUnitOfWork):
             self._chat_repository = None
             self._message_repository = None
             self._workflow_repository = None
+            self._document_embedding_repository = None
+            self._asset_embedding_repository = None
             await session.close()
             logger.debug('Agents unit of work closed')
 
@@ -121,6 +151,24 @@ class AgentsUnitOfWork(IAgentsUnitOfWork):
                 'workflow_repository is available only inside the context'
             )
         return self._workflow_repository
+
+    @property
+    def document_embedding_repository(self) -> IDocumentEmbeddingRepository:
+        if self._document_embedding_repository is None:
+            raise RuntimeError(
+                'document_embedding_repository is available only '
+                'inside the context'
+            )
+        return self._document_embedding_repository
+
+    @property
+    def asset_embedding_repository(self) -> IAssetEmbeddingRepository:
+        if self._asset_embedding_repository is None:
+            raise RuntimeError(
+                'asset_embedding_repository is available only '
+                'inside the context'
+            )
+        return self._asset_embedding_repository
 
     def _require_session(self) -> AsyncSession:
         if self._session is None:

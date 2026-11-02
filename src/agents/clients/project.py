@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from typing import Protocol
 
+from agents.dtos.project_resource import EmbeddingSourceDTO
 from agents.exceptions import ApiKeyNotFoundException
 from infra.logs import get_logger
 from project.dtos.page import PaginationDTO
@@ -22,6 +23,14 @@ logger = get_logger(__name__)
 
 
 class IProjectClient(Protocol):
+    async def get_document_embedding_source(
+        self, document_id: int
+    ) -> EmbeddingSourceDTO | None: ...
+
+    async def get_asset_embedding_source(
+        self, asset_id: int
+    ) -> EmbeddingSourceDTO | None: ...
+
     async def has_permission(
         self, project_id: int, user_id: int, permission: ProjectPermission
     ) -> bool: ...
@@ -41,6 +50,24 @@ class ProjectClient:
     ) -> None:
         self._project_api = project_api
         self._unit_of_work_factory = unit_of_work_factory
+
+    async def get_document_embedding_source(
+        self, document_id: int
+    ) -> EmbeddingSourceDTO | None:
+        document = await self._project_api.get_document_embedding_source(
+            document_id
+        )
+        if document is None:
+            return None
+        return EmbeddingSourceDTO(document.name, document.description)
+
+    async def get_asset_embedding_source(
+        self, asset_id: int
+    ) -> EmbeddingSourceDTO | None:
+        asset = await self._project_api.get_asset_embedding_source(asset_id)
+        if asset is None:
+            return None
+        return EmbeddingSourceDTO(asset.name, asset.description)
 
     async def has_permission(
         self, project_id: int, user_id: int, permission: ProjectPermission

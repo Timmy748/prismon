@@ -44,6 +44,20 @@ class ProjectPublicAPI:
     ) -> bool:
         return has_permission(role=role, permission=permission)
 
+    async def get_document_embedding_source(
+        self, document_id: int
+    ) -> DocumentDTO | None:
+        async with self.unit_of_work_factory() as unit_of_work:
+            return await unit_of_work.document_repository.get_document(
+                document_id
+            )
+
+    async def get_asset_embedding_source(
+        self, asset_id: int
+    ) -> AssetDTO | None:
+        async with self.unit_of_work_factory() as unit_of_work:
+            return await unit_of_work.asset_repository.get_asset(asset_id)
+
     async def get_api_key(
         self, project_id: int, user_id: int, api_key_id: int
     ) -> str:
