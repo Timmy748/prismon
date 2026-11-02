@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -18,6 +18,8 @@ from project.entities.member import MemberRole, MemberStatus
 from project.repositories.asset import IAssetRepository
 from project.repositories.member import IMemberRepository
 from project.repositories.project import IProjectRepository
+from project.repositories.resource_event import IProjectResourceEventRepository
+from project.repositories.upload_intent import IUploadIntentRepository
 from project.routes.assets import create_assets_router
 from project.storage import IStorage
 from project.tests.fixtures.mock import make_unit_of_work
@@ -29,7 +31,10 @@ def asset_api():
     member_repo = AsyncMock(spec=IMemberRepository)
     asset_repo = AsyncMock(spec=IAssetRepository)
     user_client = AsyncMock(spec=IUserClient)
-    storage = MagicMock(spec=IStorage)
+    storage = AsyncMock(spec=IStorage)
+    storage.generate_presigned_put_url.return_value = (
+        'https://rustfs.test/signed-put'
+    )
     now = datetime.now(timezone.utc)
     user = UserDTO(7, 'ana', 'ana@example.com')
     project = ProjectDTO(2, 'Project', 7, now, now)
@@ -37,6 +42,7 @@ def asset_api():
     asset = AssetDTO(
         4,
         2,
+        1,
         'projects/2/assets/file',
         'image',
         'cover',
@@ -60,6 +66,12 @@ def asset_api():
     unit_of_work = make_unit_of_work(
         project_repo, member_repo, asset_repo=asset_repo
     )
+    unit_of_work.upload_intent_repository = AsyncMock(
+        spec=IUploadIntentRepository
+    )
+    unit_of_work.resource_event_repository = AsyncMock(
+        spec=IProjectResourceEventRepository
+    )
 
     app = FastAPI()
     app.include_router(
@@ -77,6 +89,7 @@ def asset_api():
         user_client,
         storage,
         asset,
+        unit_of_work,
     )
 
 
@@ -86,3 +99,13 @@ async def asset_client(asset_api):
         transport=ASGITransport(app=asset_api[0]), base_url='http://test'
     ) as client:
         yield client
+
+
+@pytest_asyncio.fixture
+async def sample_asset_creator(member_repo, sample_project):
+    return await member_repo.create_member(
+        sample_project.id,
+        user_id=1,
+        role=MemberRole.OWNER,
+        status=MemberStatus.ACTIVE,
+    )

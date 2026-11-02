@@ -24,11 +24,14 @@ async def test_unit_of_work_binds_all_repositories_to_one_session(
 
     async with unit_of_work as entered:
         assert entered is unit_of_work
+        assert unit_of_work.api_key_repository._session is session
         assert unit_of_work.project_repository is project_repository
         assert unit_of_work.member_repository is member_repository
         assert unit_of_work.document_repository is document_repository
         assert unit_of_work.asset_repository is asset_repository
         assert unit_of_work.tag_repository is tag_repository
+        assert unit_of_work.upload_intent_repository._session is session
+        assert unit_of_work.resource_event_repository._session is session
         for name, repository in (
             ('ProjectRepository', project_repository),
             ('MemberRepository', member_repository),
@@ -88,11 +91,14 @@ async def test_unit_of_work_rejects_reentry(uow_dependencies):
 @pytest.mark.parametrize(
     'repository_property',
     [
+        'api_key_repository',
         'project_repository',
         'member_repository',
         'document_repository',
         'asset_repository',
         'tag_repository',
+        'upload_intent_repository',
+        'resource_event_repository',
     ],
 )
 def test_unit_of_work_repository_is_unavailable_outside_context(

@@ -10,6 +10,8 @@ from project.entities.tag import Tag, document_tags
 
 
 class DocumentStatus(str, Enum):
+    UPLOADING = 'uploading'
+    FAILED = 'failed'
     DRAFT = 'draft'
     PENDING = 'pending'
     PUBLISHED = 'published'
@@ -32,8 +34,13 @@ class Document:
     project_id: Mapped[int] = mapped_column(
         ForeignKey('projects.id', ondelete='CASCADE')
     )
-    file: Mapped[str] = mapped_column(String(256))
+    created_by_member_id: Mapped[int] = mapped_column(
+        ForeignKey('members.id'), index=True
+    )
+    file: Mapped[str | None] = mapped_column(String(256), nullable=True)
     name: Mapped[str] = mapped_column(String(256))
+    file_extension: Mapped[str | None] = mapped_column(String(16), default=None)
+    content_type: Mapped[str | None] = mapped_column(String(256), default=None)
     description: Mapped[Optional[str]] = mapped_column(
         String(256), default=None
     )

@@ -15,7 +15,7 @@ class MemoryStorage:
     def __init__(self):
         self.files: dict[str, bytes] = {}
         self.deleted: list[str] = []
-        self.presigned: list[tuple[str, str | None]] = []
+        self.presigned: list[tuple[str, str | None, str | None, str]] = []
         self.saved: list[tuple[str, bytes | None, str | None]] = []
 
     async def save(
@@ -37,13 +37,19 @@ class MemoryStorage:
         self.files.pop(key, None)
 
     async def get_presigned_url(
-        self, key: str, download_filename: str | None = None
+        self,
+        key: str,
+        download_filename: str | None = None,
+        content_type: str | None = None,
+        disposition: str = 'attachment',
     ) -> str:
-        self.presigned.append((key, download_filename))
+        self.presigned.append(
+            (key, download_filename, content_type, disposition)
+        )
         return (
-            'https://rustfs.test/signed-download'
-            if download_filename is not None
-            else 'https://rustfs.test/signed-view'
+            'https://rustfs.test/signed-view'
+            if disposition == 'inline'
+            else 'https://rustfs.test/signed-download'
         )
 
 
@@ -96,6 +102,7 @@ def asset_dependencies():
     asset = AssetDTO(
         3,
         8,
+        1,
         'projects/8/assets/original',
         'logo',
         None,

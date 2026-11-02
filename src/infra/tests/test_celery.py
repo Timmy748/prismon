@@ -1,3 +1,5 @@
+# ruff: noqa: PLR2004
+
 from unittest.mock import Mock
 
 from celery.result import AsyncResult
@@ -16,10 +18,23 @@ def test_celery_app_uses_configured_broker_and_result_backend():
 
 
 def test_celery_app_registers_short_and_long_queues_with_short_default():
-    queue_names = [queue.name for queue in celery_app.conf.task_queues]
+    queues = {queue.name: queue for queue in celery_app.conf.task_queues}
 
-    assert queue_names == ['short_tasks', 'long_tasks']
+    assert list(queues) == ['short_tasks', 'long_tasks']
     assert celery_app.conf.task_default_queue == 'short_tasks'
+    assert queues['short_tasks'].exchange.name == 'short_tasks'
+    assert queues['short_tasks'].routing_key == 'short_tasks'
+    assert queues['long_tasks'].exchange.name == 'long_tasks'
+    assert queues['long_tasks'].routing_key == 'long_tasks'
+
+
+def test_celery_imports_upload_tasks_and_schedules_expiration_on_long_queue():
+    schedule = celery_app.conf.beat_schedule['expire-stale-project-uploads']
+
+    assert celery_app.conf.imports == ('project.tasks',)
+    assert schedule['task'] == 'project.uploads.expire_stale'
+    assert schedule['schedule'].total_seconds() == 60
+    assert schedule['options'] == {'queue': 'long_tasks'}
 
 
 def test_send_task_uses_short_queue_and_forwards_arguments_and_options(
@@ -62,3 +77,6 @@ def test_send_task_uses_long_queue_when_requested(monkeypatch):
         queue='long_tasks',
     )
     assert result is expected_result
+
+
+# placeholder

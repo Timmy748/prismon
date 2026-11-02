@@ -1,3 +1,4 @@
+# ruff: noqa: PLR2004
 import pytest
 
 from project.dtos.page import PaginationDTO
@@ -7,28 +8,46 @@ from project.repositories.asset import AssetRepository
 
 @pytest.mark.asyncio
 async def test_create_and_get_asset(
-    asset_repo: AssetRepository, sample_project
+    asset_repo: AssetRepository, sample_project, sample_asset_creator
 ) -> None:
     created = await asset_repo.create_asset(
-        sample_project.id, 'https://files.test/logo.svg', 'logo'
+        sample_project.id,
+        'https://files.test/logo.svg',
+        'logo',
+        created_by_member_id=sample_asset_creator.id,
+        name='Brand mark',
+        file_extension='svg',
+        content_type='image/svg+xml',
     )
 
     loaded = await asset_repo.get_asset(created.id)
 
     assert loaded is not None
+    assert loaded.created_by_member_id == sample_asset_creator.id
     assert loaded.file == 'https://files.test/logo.svg'
     assert loaded.type == 'logo'
+    assert loaded.name == 'Brand mark'
+    assert loaded.file_extension == 'svg'
+    assert loaded.content_type == 'image/svg+xml'
 
 
 @pytest.mark.asyncio
 async def test_get_assets_filters_type_and_status(
-    asset_repo: AssetRepository, sample_project
+    asset_repo: AssetRepository, sample_project, sample_asset_creator
 ) -> None:
     wanted = await asset_repo.create_asset(
-        sample_project.id, 'url-logo', 'logo', status=AssetStatus.ACTIVE
+        sample_project.id,
+        'url-logo',
+        'logo',
+        created_by_member_id=sample_asset_creator.id,
+        status=AssetStatus.ACTIVE,
     )
     await asset_repo.create_asset(
-        sample_project.id, 'url-photo', 'photo', status=AssetStatus.ARCHIVED
+        sample_project.id,
+        'url-photo',
+        'photo',
+        created_by_member_id=sample_asset_creator.id,
+        status=AssetStatus.ARCHIVED,
     )
 
     page = await asset_repo.get_assets(
@@ -45,10 +64,13 @@ async def test_get_assets_filters_type_and_status(
 
 @pytest.mark.asyncio
 async def test_update_and_delete_asset(
-    asset_repo: AssetRepository, sample_project
+    asset_repo: AssetRepository, sample_project, sample_asset_creator
 ) -> None:
     created = await asset_repo.create_asset(
-        sample_project.id, 'url-old', 'logo'
+        sample_project.id,
+        'url-old',
+        'logo',
+        created_by_member_id=sample_asset_creator.id,
     )
 
     updated = await asset_repo.update_asset(
@@ -57,10 +79,16 @@ async def test_update_and_delete_asset(
         asset_type='symbol',
         description='Updated description',
         status=AssetStatus.ARCHIVED,
+        name='Brand mark',
+        file_extension='svg',
+        content_type='image/svg+xml',
     )
     deleted = await asset_repo.delete_asset(created.id)
 
     assert updated is not None and updated.file == 'url-new'
+    assert updated.name == 'Brand mark'
+    assert updated.file_extension == 'svg'
+    assert updated.content_type == 'image/svg+xml'
     assert deleted is None
     assert await asset_repo.get_asset(created.id) is None
 
@@ -76,10 +104,14 @@ async def test_update_asset_returns_none_when_missing(
 
 @pytest.mark.asyncio
 async def test_update_asset_without_values_preserves_existing_fields(
-    asset_repo: AssetRepository, sample_project
+    asset_repo: AssetRepository, sample_project, sample_asset_creator
 ) -> None:
     created = await asset_repo.create_asset(
-        sample_project.id, 'url-old', 'logo', description='Keep this'
+        sample_project.id,
+        'url-old',
+        'logo',
+        created_by_member_id=sample_asset_creator.id,
+        description='Keep this',
     )
 
     updated = await asset_repo.update_asset(created.id)
@@ -98,11 +130,14 @@ async def test_delete_asset_does_nothing_when_missing(
 
 @pytest.mark.asyncio
 async def test_asset_cursor_returns_older_assets(
-    asset_repo: AssetRepository, sample_project
+    asset_repo: AssetRepository, sample_project, sample_asset_creator
 ) -> None:
     assets = [
         await asset_repo.create_asset(
-            sample_project.id, f'url-{index}', 'graphic'
+            sample_project.id,
+            f'url-{index}',
+            'graphic',
+            created_by_member_id=sample_asset_creator.id,
         )
         for index in range(3)
     ]

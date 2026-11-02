@@ -26,10 +26,13 @@ class IDocumentRepository(Protocol):
     async def create_document(
         self,
         project_id: int,
-        file: str,
+        created_by_member_id: int,
+        file: str | None,
         name: str,
         description: str | None = None,
         status: DocumentStatus = DocumentStatus.DRAFT,
+        file_extension: str | None = None,
+        content_type: str | None = None,
     ) -> DocumentDTO: ...
     async def update_document(
         self,
@@ -38,6 +41,8 @@ class IDocumentRepository(Protocol):
         name: str | None = None,
         description: str | None = None,
         status: DocumentStatus | None = None,
+        file_extension: str | None = None,
+        content_type: str | None = None,
     ) -> DocumentDTO | None: ...
     async def delete_document(self, document_id: int) -> None: ...
 
@@ -50,6 +55,7 @@ class DocumentRepository:
         return DocumentDTO(
             row.id,
             row.project_id,
+            row.created_by_member_id,
             row.file,
             row.name,
             row.description,
@@ -66,6 +72,8 @@ class DocumentRepository:
                 )
                 for tag in row.tags
             ],
+            row.file_extension,
+            row.content_type,
         )
 
     async def get_document(self, document_id: int) -> DocumentDTO | None:
@@ -126,20 +134,26 @@ class DocumentRepository:
     async def create_document(
         self,
         project_id: int,
-        file: str,
+        created_by_member_id: int,
+        file: str | None,
         name: str,
         description: str | None = None,
         status: DocumentStatus = DocumentStatus.DRAFT,
+        file_extension: str | None = None,
+        content_type: str | None = None,
     ) -> DocumentDTO:
         logger.debug(
             'Creating document repository record: project_id=%s', project_id
         )
         row = Document(
             project_id=project_id,
+            created_by_member_id=created_by_member_id,
             file=file,
             name=name,
             description=description,
             status=status,
+            file_extension=file_extension,
+            content_type=content_type,
         )
         self._session.add(row)
         await self._session.flush()
@@ -154,6 +168,8 @@ class DocumentRepository:
         name: str | None = None,
         description: str | None = None,
         status: DocumentStatus | None = None,
+        file_extension: str | None = None,
+        content_type: str | None = None,
     ) -> DocumentDTO | None:
         logger.debug(
             'Updating document repository record: document_id=%s', document_id
@@ -171,6 +187,10 @@ class DocumentRepository:
             row.description = description
         if status is not None:
             row.status = status
+        if file_extension is not None:
+            row.file_extension = file_extension
+        if content_type is not None:
+            row.content_type = content_type
         await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)

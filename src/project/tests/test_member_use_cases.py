@@ -269,3 +269,17 @@ async def test_remove_member_denies_member_role(
     target = await member_repo.create_member(project.id, 2)
     with pytest.raises(InsufficientProjectPermissionException):
         await remove_member(unit_of_work, project.id, 1, target.id)
+
+
+@pytest.mark.asyncio
+async def test_remove_member_raises_if_repository_update_returns_none(
+    project_repo, member_repo, unit_of_work
+):
+    project, _ = await _project_with_owner(project_repo, member_repo)
+    target = await member_repo.create_member(project.id, 2)
+    member_repo.update_member = AsyncMock(return_value=None)
+
+    with pytest.raises(MemberNotFoundException):
+        await remove_member(unit_of_work, project.id, 1, target.id)
+
+    unit_of_work.commit.assert_not_awaited()

@@ -2,13 +2,13 @@
 from collections.abc import Callable
 from http import HTTPStatus
 
-from fastapi import APIRouter, File, Form, Query, Request, UploadFile
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import RedirectResponse, Response
 
 from infra.logs import get_logger
 from project.clients.client_user import IUserClient, create_identity_client
 from project.dtos.document import (
-    CreateDocumentDTO,
+    StartDocumentUploadDTO,
     UpdateDocumentDTO,
 )
 from project.dtos.page import PaginationDTO
@@ -18,15 +18,26 @@ from project.exceptions import (
     ProjectUserAuthenticationException,
 )
 from project.handlers.errors import handle_project_error
-from project.schemas.document import DocumentPageSchema, DocumentSchema
+from project.schemas.document import (
+    DocumentEventPageSchema,
+    DocumentEventSchema,
+    DocumentPageSchema,
+    DocumentSchema,
+    DocumentUploadSchema,
+    ReplaceDocumentUploadRequest,
+    StartDocumentUploadRequest,
+    UpdateDocumentRequest,
+)
 from project.storage import IStorage, create_storage
 from project.unit_of_work import IProjectUnitOfWork, create_project_unit_of_work
 from project.use_cases.documents import (
-    add_document,
     delete_document,
     download_document,
+    get_document_events,
     get_document_file_url,
     get_documents,
+    start_document_replacement,
+    start_document_upload,
     update_document,
 )
 from project.utils.pagination import decode_cursor, encode_cursor
@@ -86,33 +97,65 @@ def create_documents_router(
             return handle_project_error(error)
 
     @router.post(
-        '', response_model=DocumentSchema, status_code=HTTPStatus.CREATED
+        '',
+        response_model=DocumentUploadSchema,
+        status_code=HTTPStatus.CREATED,
     )
     async def post_document(
         request: Request,
         project_id: int,
-        name: str = Form(...),
-        description: str | None = Form(default=None),
-        file: UploadFile = File(...),
+        data: StartDocumentUploadRequest,
     ):
         logger.info('Document route started: operation=create')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
-                dto = await add_document(
+                dto = await start_document_upload(
                     unit_of_work,
                     storage_factory(),
                     project_id,
                     user.id,
-                    CreateDocumentDTO(
-                        file='', name=name, description=description or ''
+                    StartDocumentUploadDTO(
+                        name=data.name,
+                        original_filename=data.original_filename,
+                        description=data.description or '',
+                        content_type=data.content_type,
                     ),
-                    await file.read(),
-                    file.content_type,
                 )
-            result = DocumentSchema.from_dto(dto)
             logger.info('Document route completed: operation=create')
-            return result
+            return DocumentUploadSchema.from_dto(dto)
+        except ProjectException as error:
+            return handle_project_error(error)
+
+    @router.post(
+        '/{document_id}/uploads',
+        response_model=DocumentUploadSchema,
+        status_code=HTTPStatus.ACCEPTED,
+    )
+    async def post_document_upload(
+        request: Request,
+        project_id: int,
+        document_id: int,
+        data: ReplaceDocumentUploadRequest,
+    ):
+        logger.info('Document route started: operation=upload')
+        try:
+            user = await resolve_current_user(request.cookies)
+            async with unit_of_work_factory() as unit_of_work:
+                dto = await start_document_replacement(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    document_id,
+                    data.content_type,
+                    UpdateDocumentDTO(
+                        name=data.name, description=data.description
+                    ),
+                    original_filename=data.original_filename,
+                )
+            logger.info('Document route completed: operation=upload')
+            return DocumentUploadSchema.from_dto(dto)
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -121,9 +164,7 @@ def create_documents_router(
         request: Request,
         project_id: int,
         document_id: int,
-        name: str | None = Form(default=None),
-        description: str | None = Form(default=None),
-        file: UploadFile | None = File(default=None),
+        data: UpdateDocumentRequest,
     ):
         logger.info('Document route started: operation=update')
         try:
@@ -135,12 +176,46 @@ def create_documents_router(
                     project_id,
                     user.id,
                     document_id,
-                    UpdateDocumentDTO(name=name, description=description),
-                    await file.read() if file is not None else None,
-                    file.content_type if file is not None else None,
+                    UpdateDocumentDTO(
+                        name=data.name, description=data.description
+                    ),
                 )
             result = DocumentSchema.from_dto(dto)
             logger.info('Document route completed: operation=update')
+            return result
+        except ProjectException as error:
+            return handle_project_error(error)
+
+    @router.get(
+        '/{document_id}/history', response_model=DocumentEventPageSchema
+    )
+    async def list_document_history(
+        request: Request,
+        project_id: int,
+        document_id: int,
+        cursor: str | None = Query(default=None),
+        limit: int = Query(default=50, ge=1, le=100),
+    ):
+        logger.info('Document route started: operation=history')
+        try:
+            user = await resolve_current_user(request.cookies)
+            async with unit_of_work_factory() as unit_of_work:
+                page = await get_document_events(
+                    unit_of_work,
+                    project_id,
+                    user.id,
+                    document_id,
+                    PaginationDTO(cursor=decode_cursor(cursor), limit=limit),
+                )
+            result = DocumentEventPageSchema(
+                items=[
+                    DocumentEventSchema.from_dto(item) for item in page.items
+                ],
+                limit=page.pagination.limit,
+                more=page.pagination.more,
+                cursor=encode_cursor(page.pagination.cursor),
+            )
+            logger.info('Document route completed: operation=history')
             return result
         except ProjectException as error:
             return handle_project_error(error)

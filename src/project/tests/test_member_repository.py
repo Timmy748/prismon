@@ -1,7 +1,7 @@
 import pytest
 
 from project.dtos.page import PaginationDTO
-from project.entities.member import MemberRole, MemberStatus
+from project.entities.member import Member, MemberRole, MemberStatus
 from project.repositories.member import MemberRepository
 
 
@@ -82,6 +82,31 @@ async def test_delete_member_does_nothing_when_missing(
     result = await member_repo.delete_member(404)
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_delete_referenced_member_preserves_row_for_foreign_keys(
+    member_repo: MemberRepository,
+    asset_repo,
+    session,
+    sample_project,
+) -> None:
+    member = await member_repo.create_member(
+        sample_project.id, user_id=62, status=MemberStatus.PENDING
+    )
+    await asset_repo.create_asset(
+        sample_project.id,
+        file=None,
+        asset_type='image',
+        created_by_member_id=member.id,
+    )
+
+    await member_repo.delete_member(member.id)
+
+    persisted_member = await session.get(Member, member.id)
+    assert persisted_member is not None
+    assert persisted_member.status is MemberStatus.REMOVED
+    assert await member_repo.get_member(member.id) is None
 
 
 @pytest.mark.asyncio

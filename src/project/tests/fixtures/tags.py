@@ -41,6 +41,7 @@ def tag_api():
     asset = AssetDTO(
         4,
         2,
+        1,
         'projects/2/assets/file',
         'image',
         'cover',
@@ -51,6 +52,7 @@ def tag_api():
     document = DocumentDTO(
         5,
         2,
+        1,
         'projects/2/documents/file',
         'Brief',
         None,
