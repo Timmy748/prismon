@@ -156,7 +156,11 @@ async def remove_member(
     target = await uow.member_repository.get_member(member_id)
     if target is None or target.project_id != project_id:
         raise MemberNotFoundException(member_id)
-    await uow.member_repository.delete_member(member_id)
+    updated = await uow.member_repository.update_member(
+        member_id, status=MemberStatus.REMOVED
+    )
+    if updated is None:
+        raise MemberNotFoundException(member_id)
     await uow.commit()
     logger.info(
         'Project member removed: project_id=%s member_id=%s',

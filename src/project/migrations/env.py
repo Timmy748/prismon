@@ -12,6 +12,8 @@ from project.entities.document import Document
 from project.entities.asset import Asset
 from project.entities.api_key import ApiKey
 from project.entities.tag import Tag, asset_tags, document_tags
+from project.entities.resource_event import ProjectResourceEvent
+from project.entities.upload_intent import UploadIntent
 from infra.settings import get_settings
 
 

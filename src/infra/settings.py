@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     RUSTFS_SECRET_KEY: str = field(init=False)
     RUSTFS_REGION: str = field(init=False)
     RUSTFS_PRESIGNED_URL_TTL_SECONDS: int = Field(default=3600, ge=1, le=604800)
+    RUSTFS_UPLOAD_EXPIRATION_GRACE_SECONDS: int = Field(
+        default=600, ge=0, le=86400
+    )
+    RUSTFS_WEBHOOK_AUTH_TOKEN: SecretStr = SecretStr('')
     API_KEY_KEK: SecretStr = SecretStr('')
 
     # Identity

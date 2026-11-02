@@ -27,8 +27,12 @@ def _asset(asset_id=4, tags=None):
     return SimpleNamespace(
         id=asset_id,
         project_id=2,
+        created_by_member_id=101,
         file='asset-key',
+        name='Main logo',
         type='image',
+        file_extension=None,
+        content_type=None,
         description='cover',
         status=AssetStatus.ACTIVE,
         created_at=NOW,
@@ -110,12 +114,41 @@ async def test_asset_repository_create_returns_empty_tag_list():
     session.refresh.side_effect = refresh
 
     result = await AssetRepository(session).create_asset(
-        2, 'asset-key', 'image', 'cover'
+        2,
+        'asset-key',
+        'image',
+        created_by_member_id=101,
+        description='cover',
     )
 
     assert result.id == 4
+    assert result.created_by_member_id == 101
     assert result.tags == []
     assert isinstance(session.add.call_args.args[0], Asset)
+
+
+@pytest.mark.asyncio
+async def test_asset_repository_create_supports_pending_upload_without_file():
+    session = _session()
+
+    def refresh(row):
+        row.id = 4
+        row.created_at = NOW
+        row.updated_at = NOW
+
+    session.refresh.side_effect = refresh
+
+    result = await AssetRepository(session).create_asset(
+        2,
+        None,
+        'image',
+        created_by_member_id=101,
+        status=AssetStatus.UPLOADING,
+    )
+
+    assert result.file is None
+    assert result.created_by_member_id == 101
+    assert result.status is AssetStatus.UPLOADING
 
 
 @pytest.mark.asyncio

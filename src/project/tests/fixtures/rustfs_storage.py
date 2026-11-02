@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from pydantic import SecretStr
 
 import project.storage as storage_module
 from infra.settings import Settings
@@ -34,8 +35,11 @@ def rustfs_s3_client():
     client.head_bucket = AsyncMock()
     client.create_bucket = AsyncMock()
     client.put_object = AsyncMock()
+    client.copy_object = AsyncMock()
     client.head_object = AsyncMock()
     client.delete_object = AsyncMock()
+    client.get_bucket_notification_configuration = AsyncMock(return_value={})
+    client.put_bucket_notification_configuration = AsyncMock()
     client.generate_presigned_url = AsyncMock(
         return_value='https://rustfs.test/signed'
     )
@@ -53,18 +57,26 @@ def rustfs_test_settings():
         RUSTFS_SECRET_KEY='secret',
         RUSTFS_REGION='us-east-1',
         RUSTFS_PRESIGNED_URL_TTL_SECONDS=900,
+        RUSTFS_UPLOAD_EXPIRATION_GRACE_SECONDS=600,
+        RUSTFS_WEBHOOK_AUTH_TOKEN=SecretStr('test-webhook-token'),
     )
 
 
 @pytest.fixture
 def rustfs_storage(monkeypatch, rustfs_s3_client, rustfs_test_settings):
     session = FakeSession(rustfs_s3_client)
+    notification_key = (
+        rustfs_test_settings.RUSTFS_ENDPOINT_URL,
+        rustfs_test_settings.RUSTFS_BUCKET,
+    )
+    storage_module._configured_notification_buckets.discard(notification_key)
     monkeypatch.setattr(
         storage_module, 'get_settings', lambda: rustfs_test_settings
     )
     monkeypatch.setattr(storage_module.aioboto3, 'Session', lambda: session)
     adapter = create_storage()
-    return adapter, rustfs_s3_client, session
+    yield adapter, rustfs_s3_client, session
+    storage_module._configured_notification_buckets.discard(notification_key)
 
 
 @pytest.fixture
@@ -81,6 +93,8 @@ def set_required_project_environment(monkeypatch):
             'RUSTFS_SECRET_KEY': 'secret',
             'RUSTFS_REGION': 'us-east-1',
             'RUSTFS_PRESIGNED_URL_TTL_SECONDS': str(ttl_seconds),
+            'RUSTFS_UPLOAD_EXPIRATION_GRACE_SECONDS': '600',
+            'RUSTFS_WEBHOOK_AUTH_TOKEN': 'test-webhook-token',
             'PASSWORD_PEPPER': 'pepper',
             'JWT_SECRET_KEY': 'secret',
             'OTEL_SERVICE_NAME': 'prismon_test',

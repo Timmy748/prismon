@@ -1,3 +1,5 @@
+# ruff: noqa: E501, PLR2004
+
 import asyncio
 
 import pytest
@@ -266,6 +268,30 @@ async def test_presigned_download_url_encodes_filename(rustfs_storage):
 
 
 @pytest.mark.asyncio
+async def test_presigned_download_url_overrides_content_type(rustfs_storage):
+    adapter, client, _ = rustfs_storage
+
+    await adapter.get_presigned_url(
+        'file', 'texto.md', content_type='text/markdown'
+    )
+
+    params = client.generate_presigned_url.await_args.kwargs['Params']
+    assert params['ResponseContentType'] == 'text/markdown'
+
+
+@pytest.mark.asyncio
+async def test_presigned_file_url_uses_download_filename_inline(rustfs_storage):
+    adapter, client, _ = rustfs_storage
+
+    await adapter.get_presigned_url('file', 'texto.md', disposition='inline')
+
+    params = client.generate_presigned_url.await_args.kwargs['Params']
+    assert params['ResponseContentDisposition'] == (
+        "inline; filename*=UTF-8''texto.md"
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ('filename', 'expected'),
     [
@@ -308,3 +334,220 @@ def test_create_storage_returns_rustfs_adapter(rustfs_storage):
     adapter, _, _ = rustfs_storage
 
     assert isinstance(adapter, RustFSStorage)
+
+
+@pytest.mark.asyncio
+async def test_copy_object_uses_same_bucket_and_source_key(rustfs_storage):
+    adapter, client, _ = rustfs_storage
+
+    await adapter.copy_object('uploads/staging', 'projects/final')
+
+    client.copy_object.assert_awaited_once_with(
+        Bucket='test-bucket',
+        Key='projects/final',
+        CopySource={'Bucket': 'test-bucket', 'Key': 'uploads/staging'},
+        MetadataDirective='COPY',
+    )
+
+
+@pytest.mark.asyncio
+async def test_object_exists_returns_true_when_head_succeeds(rustfs_storage):
+    adapter, client, _ = rustfs_storage
+
+    assert await adapter.object_exists('present') is True
+    client.head_object.assert_awaited_once_with(
+        Bucket='test-bucket', Key='present'
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('error_code', 'status'),
+    [('404', 404), ('NoSuchKey', 404), ('NotFound', 400)],
+)
+async def test_object_exists_returns_false_for_missing_object(
+    rustfs_storage, error_code, status
+):
+    adapter, client, _ = rustfs_storage
+    client.head_object.side_effect = ClientError(
+        {
+            'Error': {'Code': error_code, 'Message': 'missing'},
+            'ResponseMetadata': {'HTTPStatusCode': status},
+        },
+        'HeadObject',
+    )
+
+    assert await adapter.object_exists('missing') is False
+
+
+@pytest.mark.asyncio
+async def test_object_exists_propagates_non_not_found_error(rustfs_storage):
+    adapter, client, _ = rustfs_storage
+    error = ClientError(
+        {
+            'Error': {'Code': 'AccessDenied', 'Message': 'denied'},
+            'ResponseMetadata': {'HTTPStatusCode': 403},
+        },
+        'HeadObject',
+    )
+    client.head_object.side_effect = error
+
+    with pytest.raises(ClientError) as raised:
+        await adapter.object_exists('private')
+
+    assert raised.value is error
+
+
+@pytest.mark.asyncio
+async def test_presigned_put_configures_bucket_notification_and_signs_content_type(
+    rustfs_storage,
+):
+    adapter, client, session = rustfs_storage
+
+    result = await adapter.generate_presigned_put_url(
+        'uploads/staging/file.png', 'image/png', EXPECTED_TTL_SECONDS
+    )
+
+    assert result == 'https://rustfs.test/signed'
+    client.get_bucket_notification_configuration.assert_awaited_once_with(
+        Bucket='test-bucket'
+    )
+    config = client.put_bucket_notification_configuration.await_args.kwargs[
+        'NotificationConfiguration'
+    ]
+    assert config['QueueConfigurations'] == [
+        {
+            'Id': 'prismon-uploads',
+            'QueueArn': 'arn:rustfs:sqs:us-east-1:primary:webhook',
+            'Events': ['s3:ObjectCreated:*'],
+            'Filter': {
+                'Key': {
+                    'FilterRules': [{'Name': 'prefix', 'Value': 'uploads/'}]
+                }
+            },
+        }
+    ]
+    client.generate_presigned_url.assert_awaited_once_with(
+        'put_object',
+        Params={
+            'Bucket': 'test-bucket',
+            'Key': 'uploads/staging/file.png',
+            'ContentType': 'image/png',
+        },
+        ExpiresIn=EXPECTED_TTL_SECONDS,
+    )
+    assert (
+        session.client_calls[-1][1]['endpoint_url'] == 'http://localhost:9000'
+    )
+
+
+@pytest.mark.asyncio
+async def test_presigned_put_preserves_other_notifications_and_replaces_rule(
+    rustfs_storage,
+):
+    adapter, client, _ = rustfs_storage
+    existing = {
+        'Id': 'prismon-uploads',
+        'QueueArn': 'old',
+        'Events': ['s3:ObjectCreated:*'],
+    }
+    other = {'Id': 'other-queue', 'QueueArn': 'arn:other', 'Events': ['s3:*']}
+    client.get_bucket_notification_configuration.return_value = {
+        'QueueConfigurations': [existing, other],
+        'TopicConfigurations': [{'Id': 'topic'}],
+        'LambdaFunctionConfigurations': [{'Id': 'lambda'}],
+        'EventBridgeConfiguration': {},
+        'ResponseMetadata': {'HTTPStatusCode': 200},
+    }
+
+    await adapter.generate_presigned_put_url('uploads/key', None, 30)
+
+    config = client.put_bucket_notification_configuration.await_args.kwargs[
+        'NotificationConfiguration'
+    ]
+    assert [item['Id'] for item in config['QueueConfigurations']] == [
+        'other-queue',
+        'prismon-uploads',
+    ]
+    assert config['TopicConfigurations'] == [{'Id': 'topic'}]
+    assert config['LambdaFunctionConfigurations'] == [{'Id': 'lambda'}]
+    assert config['EventBridgeConfiguration'] == {}
+    assert 'ResponseMetadata' not in config
+    assert client.generate_presigned_url.await_args.kwargs['Params'] == {
+        'Bucket': 'test-bucket',
+        'Key': 'uploads/key',
+    }
+
+
+@pytest.mark.asyncio
+async def test_presigned_put_skips_reconfiguring_cached_notification(
+    rustfs_storage,
+):
+    adapter, client, _ = rustfs_storage
+
+    await adapter.generate_presigned_put_url('uploads/one', None, 30)
+    await adapter.generate_presigned_put_url('uploads/two', None, 30)
+
+    client.get_bucket_notification_configuration.assert_awaited_once()
+    client.put_bucket_notification_configuration.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_presigned_put_accepts_already_configured_exact_rule(
+    rustfs_storage,
+):
+    adapter, client, _ = rustfs_storage
+    client.get_bucket_notification_configuration.return_value = {
+        'QueueConfigurations': [
+            {
+                'Id': 'prismon-uploads',
+                'QueueArn': 'arn:rustfs:sqs:us-east-1:primary:webhook',
+                'Events': ['s3:ObjectCreated:*'],
+                'Filter': {
+                    'Key': {
+                        'FilterRules': [{'Name': 'prefix', 'Value': 'uploads/'}]
+                    }
+                },
+            }
+        ]
+    }
+
+    await adapter.generate_presigned_put_url('uploads/file', None, 30)
+
+    client.put_bucket_notification_configuration.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_presigned_put_rechecks_notification_state_after_lock(
+    rustfs_storage,
+):
+    adapter, client, _ = rustfs_storage
+
+    class NotificationLock:
+        async def __aenter__(self):
+            adapter._upload_notifications_ready = True
+
+        async def __aexit__(self, *args):
+            return False
+
+    adapter._upload_notifications_lock = NotificationLock()
+
+    await adapter.ensure_upload_notifications()
+
+    client.get_bucket_notification_configuration.assert_not_awaited()
+    client.put_bucket_notification_configuration.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_presigned_put_fails_without_webhook_secret(
+    rustfs_storage, monkeypatch
+):
+    adapter, client, _ = rustfs_storage
+    adapter._settings.RUSTFS_WEBHOOK_AUTH_TOKEN = type(
+        adapter._settings.RUSTFS_WEBHOOK_AUTH_TOKEN
+    )('')
+
+    with pytest.raises(RuntimeError, match='RUSTFS_WEBHOOK_AUTH_TOKEN'):
+        await adapter.generate_presigned_put_url('uploads/key', None, 30)
+
+    client.generate_presigned_url.assert_not_awaited()

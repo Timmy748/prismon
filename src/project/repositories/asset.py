@@ -26,10 +26,14 @@ class IAssetRepository(Protocol):
     async def create_asset(
         self,
         project_id: int,
-        file: str,
+        file: str | None,
         asset_type: str,
+        created_by_member_id: int,
         description: str | None = None,
         status: AssetStatus = AssetStatus.ACTIVE,
+        name: str = '',
+        file_extension: str | None = None,
+        content_type: str | None = None,
     ) -> AssetDTO: ...
     async def update_asset(
         self,
@@ -38,6 +42,9 @@ class IAssetRepository(Protocol):
         asset_type: str | None = None,
         description: str | None = None,
         status: AssetStatus | None = None,
+        name: str | None = None,
+        file_extension: str | None = None,
+        content_type: str | None = None,
     ) -> AssetDTO | None: ...
     async def delete_asset(self, asset_id: int) -> None: ...
 
@@ -50,6 +57,7 @@ class AssetRepository:
         return AssetDTO(
             row.id,
             row.project_id,
+            row.created_by_member_id,
             row.file,
             row.type,
             row.description,
@@ -66,6 +74,9 @@ class AssetRepository:
                 )
                 for tag in row.tags
             ],
+            row.name,
+            row.file_extension,
+            row.content_type,
         )
 
     async def get_asset(self, asset_id: int) -> AssetDTO | None:
@@ -124,20 +135,28 @@ class AssetRepository:
     async def create_asset(
         self,
         project_id: int,
-        file: str,
+        file: str | None,
         asset_type: str,
+        created_by_member_id: int,
         description: str | None = None,
         status: AssetStatus = AssetStatus.ACTIVE,
+        name: str = '',
+        file_extension: str | None = None,
+        content_type: str | None = None,
     ) -> AssetDTO:
         logger.debug(
             'Creating asset repository record: project_id=%s', project_id
         )
         row = Asset(
             project_id=project_id,
+            created_by_member_id=created_by_member_id,
             file=file,
+            name=name,
             type=asset_type,
             description=description,
             status=status,
+            file_extension=file_extension,
+            content_type=content_type,
         )
         self._session.add(row)
         await self._session.flush()
@@ -152,6 +171,9 @@ class AssetRepository:
         asset_type: str | None = None,
         description: str | None = None,
         status: AssetStatus | None = None,
+        name: str | None = None,
+        file_extension: str | None = None,
+        content_type: str | None = None,
     ) -> AssetDTO | None:
         logger.debug('Updating asset repository record: asset_id=%s', asset_id)
         row = await self._session.get(
@@ -163,10 +185,16 @@ class AssetRepository:
             row.file = file
         if asset_type is not None:
             row.type = asset_type
+        if name is not None:
+            row.name = name
         if description is not None:
             row.description = description
         if status is not None:
             row.status = status
+        if file_extension is not None:
+            row.file_extension = file_extension
+        if content_type is not None:
+            row.content_type = content_type
         await self._session.flush()
         await self._session.refresh(row)
         return self._to_dto(row)

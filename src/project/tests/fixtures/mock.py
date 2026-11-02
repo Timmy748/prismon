@@ -6,17 +6,21 @@ from project.repositories.asset import IAssetRepository
 from project.repositories.document import IDocumentRepository
 from project.repositories.member import IMemberRepository
 from project.repositories.project import IProjectRepository
+from project.repositories.resource_event import IProjectResourceEventRepository
 from project.repositories.tag import ITagRepository
+from project.repositories.upload_intent import IUploadIntentRepository
 from project.storage import IStorage
 from project.unit_of_work import IProjectUnitOfWork
 
 
-def make_unit_of_work(
+def make_unit_of_work(  # noqa: PLR0913, PLR0917
     project_repo=None,
     member_repo=None,
     document_repo=None,
     asset_repo=None,
     tag_repo=None,
+    upload_intent_repo=None,
+    resource_event_repo=None,
 ):
     unit_of_work = MagicMock(spec=IProjectUnitOfWork)
     unit_of_work.project_repository = project_repo or AsyncMock(
@@ -32,6 +36,12 @@ def make_unit_of_work(
         spec=IAssetRepository
     )
     unit_of_work.tag_repository = tag_repo or AsyncMock(spec=ITagRepository)
+    unit_of_work.upload_intent_repository = upload_intent_repo or AsyncMock(
+        spec=IUploadIntentRepository
+    )
+    unit_of_work.resource_event_repository = resource_event_repo or AsyncMock(
+        spec=IProjectResourceEventRepository
+    )
     unit_of_work.commit = AsyncMock()
     unit_of_work.rollback = AsyncMock()
     unit_of_work.__aenter__ = AsyncMock(return_value=unit_of_work)

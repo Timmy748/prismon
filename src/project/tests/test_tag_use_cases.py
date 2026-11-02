@@ -56,10 +56,10 @@ def _uow(role=MemberRole.OWNER):
         PaginationDTO(limit=100),
     )
     asset_repo.get_asset.return_value = AssetDTO(
-        4, 2, 'asset', 'image', None, AssetStatus.ACTIVE, NOW, NOW
+        4, 2, 1, 'asset', 'image', None, AssetStatus.ACTIVE, NOW, NOW
     )
     document_repo.get_document.return_value = DocumentDTO(
-        5, 2, 'document', 'Brief', None, DocumentStatus.DRAFT, NOW, NOW
+        5, 2, 1, 'document', 'Brief', None, DocumentStatus.DRAFT, NOW, NOW
     )
     tag_repo.get_tag.return_value = TAG
     unit_of_work = make_unit_of_work(
@@ -207,7 +207,7 @@ async def test_get_asset_tags_returns_linked_tags_for_project_asset():
 async def test_get_asset_tags_hides_asset_from_another_project():
     uow, _, _, asset_repo, _, tag_repo = _uow()
     asset_repo.get_asset.return_value = AssetDTO(
-        4, 3, 'asset', 'image', None, AssetStatus.ACTIVE, NOW, NOW
+        4, 3, 1, 'asset', 'image', None, AssetStatus.ACTIVE, NOW, NOW
     )
 
     with pytest.raises(AssetNotFoundException):
@@ -262,7 +262,7 @@ async def test_get_document_tags_returns_linked_tags_for_project_document():
 async def test_get_document_tags_hides_document_from_another_project():
     uow, _, _, _, document_repo, tag_repo = _uow()
     document_repo.get_document.return_value = DocumentDTO(
-        5, 3, 'document', 'Brief', None, DocumentStatus.DRAFT, NOW, NOW
+        5, 3, 1, 'document', 'Brief', None, DocumentStatus.DRAFT, NOW, NOW
     )
 
     with pytest.raises(DocumentNotFoundException):

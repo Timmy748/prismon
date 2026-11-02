@@ -7,31 +7,61 @@ from project.repositories.document import DocumentRepository
 
 @pytest.mark.asyncio
 async def test_create_and_get_document(
-    document_repo: DocumentRepository, sample_project
+    document_repo: DocumentRepository, sample_project, document_creator_member
 ) -> None:
     created = await document_repo.create_document(
-        sample_project.id, 'https://files.test/voice.pdf', 'Voice guide'
+        sample_project.id,
+        document_creator_member.id,
+        'https://files.test/voice.pdf',
+        'Voice guide',
+        file_extension='md',
+        content_type='text/markdown',
     )
 
     loaded = await document_repo.get_document(created.id)
 
     assert loaded is not None
     assert loaded.file == 'https://files.test/voice.pdf'
+    assert loaded.created_by_member_id == document_creator_member.id
     assert loaded.status == DocumentStatus.DRAFT
+    assert loaded.file_extension == 'md'
+    assert loaded.content_type == 'text/markdown'
+
+
+@pytest.mark.asyncio
+async def test_create_uploading_document_without_file(
+    document_repo: DocumentRepository, sample_project, document_creator_member
+) -> None:
+    created = await document_repo.create_document(
+        sample_project.id,
+        document_creator_member.id,
+        None,
+        'Pending upload',
+        status=DocumentStatus.UPLOADING,
+    )
+
+    assert created.created_by_member_id == document_creator_member.id
+    assert created.file is None
+    assert created.status is DocumentStatus.UPLOADING
 
 
 @pytest.mark.asyncio
 async def test_get_documents_filters_name_and_status(
-    document_repo: DocumentRepository, sample_project
+    document_repo: DocumentRepository, sample_project, document_creator_member
 ) -> None:
     wanted = await document_repo.create_document(
         sample_project.id,
+        document_creator_member.id,
         'url-a',
         'Voice guide',
         status=DocumentStatus.PUBLISHED,
     )
     await document_repo.create_document(
-        sample_project.id, 'url-b', 'Logo guide', status=DocumentStatus.DRAFT
+        sample_project.id,
+        document_creator_member.id,
+        'url-b',
+        'Logo guide',
+        status=DocumentStatus.DRAFT,
     )
 
     page = await document_repo.get_documents(
@@ -48,10 +78,10 @@ async def test_get_documents_filters_name_and_status(
 
 @pytest.mark.asyncio
 async def test_update_and_delete_document(
-    document_repo: DocumentRepository, sample_project
+    document_repo: DocumentRepository, sample_project, document_creator_member
 ) -> None:
     created = await document_repo.create_document(
-        sample_project.id, 'url-old', 'Draft'
+        sample_project.id, document_creator_member.id, 'url-old', 'Draft'
     )
 
     updated = await document_repo.update_document(
@@ -60,10 +90,14 @@ async def test_update_and_delete_document(
         name='Published',
         description='Updated description',
         status=DocumentStatus.PUBLISHED,
+        file_extension='md',
+        content_type='text/markdown',
     )
     deleted = await document_repo.delete_document(created.id)
 
     assert updated is not None and updated.file == 'url-new'
+    assert updated.file_extension == 'md'
+    assert updated.content_type == 'text/markdown'
     assert deleted is None
     assert await document_repo.get_document(created.id) is None
 
@@ -79,10 +113,14 @@ async def test_update_document_returns_none_when_missing(
 
 @pytest.mark.asyncio
 async def test_update_document_without_values_preserves_existing_fields(
-    document_repo: DocumentRepository, sample_project
+    document_repo: DocumentRepository, sample_project, document_creator_member
 ) -> None:
     created = await document_repo.create_document(
-        sample_project.id, 'url-old', 'Draft', description='Keep this'
+        sample_project.id,
+        document_creator_member.id,
+        'url-old',
+        'Draft',
+        description='Keep this',
     )
 
     updated = await document_repo.update_document(created.id)
@@ -101,11 +139,14 @@ async def test_delete_document_does_nothing_when_missing(
 
 @pytest.mark.asyncio
 async def test_document_cursor_returns_older_documents(
-    document_repo: DocumentRepository, sample_project
+    document_repo: DocumentRepository, sample_project, document_creator_member
 ) -> None:
     documents = [
         await document_repo.create_document(
-            sample_project.id, f'url-{index}', f'Document {index}'
+            sample_project.id,
+            document_creator_member.id,
+            f'url-{index}',
+            f'Document {index}',
         )
         for index in range(3)
     ]

@@ -2,12 +2,12 @@
 from collections.abc import Callable
 from http import HTTPStatus
 
-from fastapi import APIRouter, File, Form, Query, Request, UploadFile
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import RedirectResponse, Response
 
 from infra.logs import get_logger
 from project.clients.client_user import IUserClient, create_identity_client
-from project.dtos.asset import CreateAssetDTO, UpdateAssetDTO
+from project.dtos.asset import StartAssetUploadDTO, UpdateAssetDTO
 from project.dtos.page import PaginationDTO
 from project.entities.asset import AssetStatus
 from project.exceptions import (
@@ -15,15 +15,26 @@ from project.exceptions import (
     ProjectUserAuthenticationException,
 )
 from project.handlers.errors import handle_project_error
-from project.schemas.asset import AssetPageSchema, AssetSchema
+from project.schemas.asset import (
+    AssetEventPageSchema,
+    AssetEventSchema,
+    AssetPageSchema,
+    AssetSchema,
+    AssetUploadSchema,
+    ReplaceAssetUploadRequest,
+    StartAssetUploadRequest,
+    UpdateAssetRequest,
+)
 from project.storage import IStorage, create_storage
 from project.unit_of_work import IProjectUnitOfWork, create_project_unit_of_work
 from project.use_cases.assets import (
-    add_asset,
     delete_asset,
     download_asset,
+    get_asset_events,
     get_asset_file_url,
     get_assets,
+    start_asset_replacement,
+    start_asset_upload,
     update_asset,
 )
 from project.utils.pagination import decode_cursor, encode_cursor
@@ -80,36 +91,64 @@ def create_assets_router(
         except ProjectException as error:
             return handle_project_error(error)
 
-    @router.post('', response_model=AssetSchema, status_code=HTTPStatus.CREATED)
+    @router.post(
+        '',
+        response_model=AssetUploadSchema,
+        status_code=HTTPStatus.CREATED,
+    )
     async def post_asset(
         request: Request,
         project_id: int,
-        type: str = Form(...),
-        description: str | None = Form(default=None),
-        file: UploadFile = File(...),
+        data: StartAssetUploadRequest,
     ):
         logger.info('Asset route started: operation=create')
         try:
             user = await resolve_current_user(request.cookies)
             async with unit_of_work_factory() as unit_of_work:
-                dto = await add_asset(
+                dto = await start_asset_upload(
                     unit_of_work,
                     storage_factory(),
                     project_id,
                     user.id,
-                    CreateAssetDTO(
-                        file='',
-                        asset='',
-                        type=type,
-                        name='',
-                        description=description or '',
+                    StartAssetUploadDTO(
+                        type=data.type,
+                        name=data.name,
+                        original_filename=data.original_filename,
+                        description=data.description or '',
+                        content_type=data.content_type,
                     ),
-                    await file.read(),
-                    file.content_type,
                 )
-            result = AssetSchema.from_dto(dto)
             logger.info('Asset route completed: operation=create')
-            return result
+            return AssetUploadSchema.from_dto(dto)
+        except ProjectException as error:
+            return handle_project_error(error)
+
+    @router.post(
+        '/{asset_id}/uploads',
+        response_model=AssetUploadSchema,
+        status_code=HTTPStatus.ACCEPTED,
+    )
+    async def post_asset_upload(
+        request: Request,
+        project_id: int,
+        asset_id: int,
+        data: ReplaceAssetUploadRequest,
+    ):
+        logger.info('Asset route started: operation=upload')
+        try:
+            user = await resolve_current_user(request.cookies)
+            async with unit_of_work_factory() as unit_of_work:
+                dto = await start_asset_replacement(
+                    unit_of_work,
+                    storage_factory(),
+                    project_id,
+                    user.id,
+                    asset_id,
+                    data.content_type,
+                    original_filename=data.original_filename,
+                )
+            logger.info('Asset route completed: operation=upload')
+            return AssetUploadSchema.from_dto(dto)
         except ProjectException as error:
             return handle_project_error(error)
 
@@ -118,9 +157,7 @@ def create_assets_router(
         request: Request,
         project_id: int,
         asset_id: int,
-        type: str | None = Form(default=None),
-        description: str | None = Form(default=None),
-        file: UploadFile | None = File(default=None),
+        data: UpdateAssetRequest,
     ):
         logger.info('Asset route started: operation=update')
         try:
@@ -132,12 +169,44 @@ def create_assets_router(
                     project_id,
                     user.id,
                     asset_id,
-                    UpdateAssetDTO(type=type, description=description),
-                    await file.read() if file is not None else None,
-                    file.content_type if file is not None else None,
+                    UpdateAssetDTO(
+                        name=data.name,
+                        type=data.type,
+                        description=data.description,
+                    ),
                 )
             result = AssetSchema.from_dto(dto)
             logger.info('Asset route completed: operation=update')
+            return result
+        except ProjectException as error:
+            return handle_project_error(error)
+
+    @router.get('/{asset_id}/history', response_model=AssetEventPageSchema)
+    async def list_asset_history(
+        request: Request,
+        project_id: int,
+        asset_id: int,
+        cursor: str | None = Query(default=None),
+        limit: int = Query(default=50, ge=1, le=100),
+    ):
+        logger.info('Asset route started: operation=history')
+        try:
+            user = await resolve_current_user(request.cookies)
+            async with unit_of_work_factory() as unit_of_work:
+                page = await get_asset_events(
+                    unit_of_work,
+                    project_id,
+                    user.id,
+                    asset_id,
+                    PaginationDTO(cursor=decode_cursor(cursor), limit=limit),
+                )
+            result = AssetEventPageSchema(
+                items=[AssetEventSchema.from_dto(item) for item in page.items],
+                limit=page.pagination.limit,
+                more=page.pagination.more,
+                cursor=encode_cursor(page.pagination.cursor),
+            )
+            logger.info('Asset route completed: operation=history')
             return result
         except ProjectException as error:
             return handle_project_error(error)

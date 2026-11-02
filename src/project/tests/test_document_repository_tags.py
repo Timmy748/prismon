@@ -27,8 +27,11 @@ def _document(document_id=5, tags=None):
     return SimpleNamespace(
         id=document_id,
         project_id=2,
+        created_by_member_id=1,
         file='document-key',
         name='Brief',
+        file_extension=None,
+        content_type=None,
         description='overview',
         status=DocumentStatus.DRAFT,
         created_at=NOW,
@@ -110,7 +113,7 @@ async def test_document_repository_create_returns_empty_tag_list():
     session.refresh.side_effect = refresh
 
     result = await DocumentRepository(session).create_document(
-        2, 'document-key', 'Brief', 'overview'
+        2, 1, 'document-key', 'Brief', 'overview'
     )
 
     assert result.id == 5

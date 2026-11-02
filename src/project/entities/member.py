@@ -17,6 +17,7 @@ class MemberRole(str, Enum):
 class MemberStatus(str, Enum):
     PENDING = 'pending'
     ACTIVE = 'active'
+    REMOVED = 'removed'
 
 
 @mapper_registry.mapped_as_dataclass

@@ -3,6 +3,9 @@ from http import HTTPStatus
 
 import pytest
 
+from project.dtos.page import CursorPage, PaginationDTO
+from project.dtos.resource_event import ResourceEventDTO
+from project.entities.asset import AssetStatus
 from project.exceptions import (
     AssetNotFoundException,
     InsufficientProjectPermissionException,
@@ -47,7 +50,9 @@ async def test_asset_file_route_redirects_to_signed_url(
     assert response.status_code == HTTPStatus.TEMPORARY_REDIRECT
     assert response.headers['location'] == 'https://rustfs.test/view'
     asset_api[5].get_presigned_url.assert_awaited_once_with(
-        'projects/2/assets/file'
+        'projects/2/assets/file',
+        download_filename='asset-4',
+        disposition='inline',
     )
 
 
@@ -133,16 +138,27 @@ async def test_list_assets_rejects_invalid_limit(asset_client):
 
 
 @pytest.mark.asyncio
-async def test_upload_asset_multipart(asset_client, asset_api):
+async def test_create_asset_returns_presigned_upload(asset_client, asset_api):
     response = await asset_client.post(
         '/projects/2/assets',
         cookies={'jwt': 'token'},
-        data={'type': 'image', 'description': 'cover'},
-        files={'file': ('cover.png', b'contents', 'image/png')},
+        json={
+            'type': 'image',
+            'name': 'Logo',
+            'original_filename': 'logo.png',
+            'description': 'cover',
+            'content_type': 'image/png',
+        },
     )
     assert response.status_code == HTTPStatus.CREATED
     assert response.json()['id'] == 4
-    asset_api[5].save.assert_awaited_once()
+    assert response.json()['file'] is not None
+    assert response.json()['upload_url'] == (
+        asset_api[5].generate_presigned_put_url.return_value
+    )
+    assert response.json()['method'] == 'PUT'
+    asset_api[5].generate_presigned_put_url.assert_awaited_once()
+    asset_api[3].create_asset.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -151,22 +167,50 @@ async def test_upload_asset_maps_domain_error(asset_client, asset_api):
     response = await asset_client.post(
         '/projects/2/assets',
         cookies={'jwt': 'token'},
-        data={'type': 'image'},
-        files={'file': ('cover.png', b'contents', 'image/png')},
+        json={
+            'type': 'image',
+            'name': 'Logo',
+            'original_filename': 'logo.png',
+        },
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
 @pytest.mark.asyncio
-async def test_update_asset_can_replace_file(asset_client, asset_api):
-    response = await asset_client.put(
-        '/projects/2/assets/4',
+async def test_start_asset_replacement_returns_presigned_upload(
+    asset_client, asset_api
+):
+    response = await asset_client.post(
+        '/projects/2/assets/4/uploads',
         cookies={'jwt': 'token'},
-        data={'type': 'photo'},
-        files={'file': ('new.png', b'new contents', 'image/png')},
+        json={
+            'original_filename': 'logo.png',
+            'content_type': 'image/png',
+        },
     )
-    assert response.status_code == HTTPStatus.OK
-    asset_api[3].update_asset.assert_awaited_once()
+    assert response.status_code == HTTPStatus.ACCEPTED
+    assert response.json()['upload_url'] == (
+        asset_api[5].generate_presigned_put_url.return_value
+    )
+    asset_api[3].update_asset.assert_awaited_once_with(
+        4, status=AssetStatus.UPLOADING
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_asset_replacement_maps_domain_error(
+    asset_client, asset_api
+):
+    asset_api[3].get_asset.side_effect = AssetNotFoundException(404)
+
+    response = await asset_client.post(
+        '/projects/2/assets/404/uploads',
+        cookies={'jwt': 'token'},
+        json={'original_filename': 'logo.png'},
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    asset_api[5].generate_presigned_put_url.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -174,7 +218,7 @@ async def test_update_asset_without_file(asset_client, asset_api):
     response = await asset_client.put(
         '/projects/2/assets/4',
         cookies={'jwt': 'token'},
-        data={'type': 'photo'},
+        json={'type': 'photo'},
     )
     assert response.status_code == HTTPStatus.OK
     asset_api[5].save.assert_not_awaited()
@@ -186,7 +230,7 @@ async def test_update_asset_maps_domain_error(asset_client, asset_api):
     response = await asset_client.put(
         '/projects/2/assets/4',
         cookies={'jwt': 'token'},
-        data={'type': 'photo'},
+        json={'type': 'photo'},
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
 
@@ -210,7 +254,7 @@ async def test_asset_not_found_is_404(asset_client, asset_api):
     response = await asset_client.put(
         '/projects/2/assets/404',
         cookies={'jwt': 'token'},
-        data={'type': 'photo'},
+        json={'type': 'photo'},
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
 
@@ -231,4 +275,38 @@ async def test_delete_asset_maps_domain_error(asset_client, asset_api):
     response = await asset_client.delete(
         '/projects/2/assets/4', cookies={'jwt': 'token'}
     )
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_asset_history_returns_events(asset_client, asset_api):
+    now = asset_api[6].created_at
+    event = ResourceEventDTO(
+        1, 2, 'asset', 4, 1, 'metadata_changed', {'changes': {}}, None, now
+    )
+    asset_api[7].resource_event_repository.get_events.return_value = CursorPage(
+        [event], PaginationDTO(limit=10)
+    )
+    response = await asset_client.get(
+        '/projects/2/assets/4/history?limit=10', cookies={'jwt': 'token'}
+    )
+    assert response.status_code == HTTPStatus.OK
+    assert response.json()['items'][0]['event_type'] == 'metadata_changed'
+    asset_api[7].resource_event_repository.get_events.assert_awaited_once_with(
+        2, 'asset', 4, PaginationDTO(limit=10)
+    )
+
+
+@pytest.mark.asyncio
+async def test_asset_history_maps_domain_error(asset_client, asset_api):
+    asset_api[
+        7
+    ].resource_event_repository.get_events.side_effect = AssetNotFoundException(
+        404
+    )
+
+    response = await asset_client.get(
+        '/projects/2/assets/404/history', cookies={'jwt': 'token'}
+    )
+
     assert response.status_code == HTTPStatus.NOT_FOUND

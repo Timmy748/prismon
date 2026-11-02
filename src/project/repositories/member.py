@@ -1,13 +1,17 @@
 # ruff: noqa: PLR0913, PLR0917
 from typing import Protocol
 
-from sqlalchemy import literal, select, tuple_
+from sqlalchemy import exists, literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from infra.logs import get_logger
 from project.dtos.member import MemberDTO
 from project.dtos.page import CursorPage, PaginationDTO
+from project.entities.asset import Asset
+from project.entities.document import Document
 from project.entities.member import Member, MemberRole, MemberStatus
+from project.entities.resource_event import ProjectResourceEvent
+from project.entities.upload_intent import UploadIntent
 
 logger = get_logger(__name__)
 
@@ -57,7 +61,12 @@ class MemberRepository:
         logger.debug(
             'Loading member repository record: member_id=%s', member_id
         )
-        row = await self._session.get(Member, member_id)
+        row = await self._session.scalar(
+            select(Member).where(
+                Member.id == member_id,
+                Member.status != MemberStatus.REMOVED,
+            )
+        )
         return self._dto(row) if row else None
 
     async def get_members(
@@ -72,7 +81,10 @@ class MemberRepository:
             'Listing member repository records: project_id=%s', project_id
         )
         limit = max(1, min(pagination.limit, 100))
-        stmt = select(Member).where(Member.project_id == project_id)
+        stmt = select(Member).where(
+            Member.project_id == project_id,
+            Member.status != MemberStatus.REMOVED,
+        )
         if pagination.cursor is not None:
             stmt = stmt.where(
                 tuple_(Member.updated_at, Member.id)
@@ -150,5 +162,28 @@ class MemberRepository:
         row = await self._session.get(Member, member_id)
         if row is None:
             return
-        await self._session.delete(row)
+
+        has_references = await self._has_resource_references(member_id)
+        if row.status is not MemberStatus.PENDING or has_references:
+            row.status = MemberStatus.REMOVED
+        else:
+            await self._session.delete(row)
         await self._session.flush()
+
+    async def _has_resource_references(self, member_id: int) -> bool:
+        checks = (
+            select(exists().where(Asset.created_by_member_id == member_id)),
+            select(exists().where(Document.created_by_member_id == member_id)),
+            select(
+                exists().where(UploadIntent.started_by_member_id == member_id)
+            ),
+            select(
+                exists().where(
+                    ProjectResourceEvent.author_member_id == member_id
+                )
+            ),
+        )
+        for check in checks:
+            if await self._session.scalar(check):
+                return True
+        return False

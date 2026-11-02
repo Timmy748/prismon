@@ -23,6 +23,18 @@ from project.storage import IStorage
 from project.tests.fixtures.mock import make_unit_of_work
 
 
+@pytest_asyncio.fixture
+async def document_creator_member(member_repo, sample_project):
+    member = await member_repo.create_member(
+        sample_project.id,
+        user_id=101,
+        role=MemberRole.MEMBER,
+        status=MemberStatus.ACTIVE,
+    )
+    assert member is not None
+    return member
+
+
 @pytest.fixture
 def document_api():
     project_repo = AsyncMock(spec=IProjectRepository)
@@ -30,6 +42,9 @@ def document_api():
     document_repo = AsyncMock(spec=IDocumentRepository)
     user_client = AsyncMock(spec=IUserClient)
     storage = MagicMock(spec=IStorage)
+    storage.generate_presigned_put_url = AsyncMock(
+        return_value='https://rustfs.test/upload'
+    )
     now = datetime.now(timezone.utc)
     user = UserDTO(7, 'ana', 'ana@example.com')
     project = ProjectDTO(2, 'Project', 7, now, now)
@@ -37,6 +52,7 @@ def document_api():
     document = DocumentDTO(
         4,
         2,
+        1,
         'projects/2/documents/file',
         'Brief',
         None,
@@ -54,12 +70,25 @@ def document_api():
         [document], PaginationDTO(limit=10)
     )
     document_repo.get_document.return_value = document
-    document_repo.create_document.return_value = document
+    document_repo.create_document.return_value = DocumentDTO(
+        4,
+        2,
+        1,
+        None,
+        'Brief',
+        None,
+        DocumentStatus.UPLOADING,
+        now,
+        now,
+        [],
+    )
     document_repo.update_document.return_value = document
 
     unit_of_work = make_unit_of_work(
         project_repo, member_repo, document_repo=document_repo
     )
+    unit_of_work.upload_intent_repository = AsyncMock()
+    unit_of_work.resource_event_repository = AsyncMock()
 
     app = FastAPI()
     app.include_router(
@@ -77,6 +106,7 @@ def document_api():
         user_client,
         storage,
         document,
+        unit_of_work,
     )
 
 
