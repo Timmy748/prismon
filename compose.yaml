@@ -21,6 +21,8 @@ services:
         condition: service_healthy
       otel_collector:
         condition: service_started
+      ollama:
+        condition: service_healthy
     env_file: .env
     healthcheck:
       test:
@@ -108,6 +110,8 @@ services:
         condition: service_healthy
       rustfs:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
 
   celery_worker_long:
     image: prismon_api
@@ -124,6 +128,8 @@ services:
       redis:
         condition: service_healthy
       rustfs:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
 
   celery_beat:
@@ -173,20 +179,26 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    profiles:
-      - dev
+    entrypoint: ["/bin/sh", "/ollama-entrypoint.sh"]
+    gpus: all
     restart: unless-stopped
     ports:
       - 11434:11434
+    environment:
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL}
     volumes:
       - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      - ./ollama-entrypoint.sh:/ollama-entrypoint.sh:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "ollama show \"$${OLLAMA_EMBEDDING_MODEL}\" >/dev/null 2>&1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 2m
 
 volumes:
   pg_data:
