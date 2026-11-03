@@ -57,6 +57,7 @@ class IStorage(Protocol):
         download_filename: str | None = None,
         content_type: str | None = None,
         disposition: Literal['attachment', 'inline'] = 'attachment',
+        endpoint_url: str | None = None,
     ) -> str: ...
 
 
@@ -330,6 +331,7 @@ class RustFSStorage:
         download_filename: str | None = None,
         content_type: str | None = None,
         disposition: Literal['attachment', 'inline'] = 'attachment',
+        endpoint_url: str | None = None,
     ) -> str:
         params: dict[str, str] = {
             'Bucket': self._settings.RUSTFS_BUCKET,
@@ -341,7 +343,7 @@ class RustFSStorage:
         if content_type is not None:
             params['ResponseContentType'] = content_type
         async with self._client(
-            self._settings.RUSTFS_PUBLIC_ENDPOINT_URL
+            endpoint_url or self._settings.RUSTFS_PUBLIC_ENDPOINT_URL
         ) as client:
             return await client.generate_presigned_url(
                 'get_object',

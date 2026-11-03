@@ -139,6 +139,8 @@ async def get_document_file_url(
     project_id: int,
     user_id: int,
     document_id: int,
+    *,
+    internal: bool = False,
 ) -> str:
     document = await _get_document_for_read(
         uow, project_id, user_id, document_id
@@ -151,6 +153,8 @@ async def get_document_file_url(
     }
     if document.content_type is not None:
         download_options['content_type'] = document.content_type
+    if internal:
+        download_options['endpoint_url'] = get_settings().RUSTFS_ENDPOINT_URL
     return await storage.get_presigned_url(document.file, **download_options)
 
 
@@ -559,6 +563,11 @@ async def delete_document(
     )
     await uow.document_repository.delete_document(document_id)
     await uow.commit()
+    send_task(
+        'agents.embeddings.delete_document',
+        args=[document_id],
+        queue=TaskQueue.LONG,
+    )
     if document.file is not None:
         await storage.delete(document.file)
     logger.info(
@@ -607,6 +616,11 @@ async def review_document(
         },
     )
     await uow.commit()
+    send_task(
+        'agents.embeddings.document',
+        args=[document_id],
+        queue=TaskQueue.LONG,
+    )
     logger.info(
         'Document review completed: project_id=%s document_id=%s accepted=%s',
         project_id,

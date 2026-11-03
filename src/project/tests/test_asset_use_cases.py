@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from infra.tasks import TaskQueue
 from project.dtos.asset import (
     ApproveAssetDTO,
     AssetDTO,
@@ -422,11 +423,18 @@ async def test_update_asset_cleans_new_file_when_repository_returns_none(
 
 
 @pytest.mark.asyncio
-async def test_delete_asset_deletes_record_and_file(asset_dependencies):
+async def test_delete_asset_deletes_record_and_file(
+    asset_dependencies, stub_embedding_enqueue
+):
     project_repo, member_repo, asset_repo, storage, asset = asset_dependencies
     uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     await delete_asset(uow, storage, 8, 12, 3)
     asset_repo.delete_asset.assert_awaited_once_with(3)
+    stub_embedding_enqueue.assert_called_once_with(
+        'agents.embeddings.delete_asset',
+        args=[3],
+        queue=TaskQueue.LONG,
+    )
     storage.delete.assert_awaited_once_with(asset.file)
 
 
@@ -482,12 +490,15 @@ async def test_delete_asset_rejects_missing_or_foreign_asset(
     ],
 )
 async def test_review_asset_changes_pending_status(
-    asset_dependencies, accept, expected
+    asset_dependencies, accept, expected, stub_embedding_enqueue
 ):
     project_repo, member_repo, asset_repo, _, _ = asset_dependencies
     uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
     await review_asset(uow, 8, 12, 3, ApproveAssetDTO(accept))
     asset_repo.update_asset.assert_awaited_once_with(3, status=expected)
+    stub_embedding_enqueue.assert_called_once_with(
+        'agents.embeddings.asset', args=[3], queue=TaskQueue.LONG
+    )
 
 
 @pytest.mark.asyncio

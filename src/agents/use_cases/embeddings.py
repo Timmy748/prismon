@@ -40,7 +40,11 @@ async def embed_document(
             f'title: {latest_document.name} | '
             f'text: {latest_document.description or ""}'
         )
-        if latest_content != content:
+        if (
+            latest_content != content
+            or latest_document.project_id != document.project_id
+            or latest_document.status != document.status
+        ):
             logger.info(
                 'Document changed during embedding; refreshing document_id=%s',
                 document_id,
@@ -48,9 +52,42 @@ async def embed_document(
             continue
 
         await agents_uow.document_embedding_repository.upsert_embedding(
-            document_id, content, embedding
+            document_id,
+            document.project_id,
+            document.status,
+            content,
+            embedding,
         )
         await agents_uow.commit()
+
+        committed_document = await project_client.get_document_embedding_source(
+            document_id
+        )
+        if committed_document is None:
+            await agents_uow.document_embedding_repository.delete_embedding(
+                document_id
+            )
+            await agents_uow.commit()
+            logger.info(
+                'Skipping embedding for deleted document_id=%s', document_id
+            )
+            return False
+        committed_content = (
+            f'title: {committed_document.name} | '
+            f'text: {committed_document.description or ""}'
+        )
+        if (
+            committed_content != content
+            or committed_document.project_id != document.project_id
+            or committed_document.status != document.status
+        ):
+            logger.info(
+                'Document changed during embedding commit; refreshing '
+                'document_id=%s',
+                document_id,
+            )
+            continue
+
         logger.info('Document embedding saved: document_id=%s', document_id)
         return True
 
@@ -84,7 +121,11 @@ async def embed_asset(
             f'title: {latest_asset.name} | '
             f'text: {latest_asset.description or ""}'
         )
-        if latest_content != content:
+        if (
+            latest_content != content
+            or latest_asset.project_id != asset.project_id
+            or latest_asset.status != asset.status
+        ):
             logger.info(
                 'Asset changed during embedding; refreshing asset_id=%s',
                 asset_id,
@@ -92,9 +133,39 @@ async def embed_asset(
             continue
 
         await agents_uow.asset_embedding_repository.upsert_embedding(
-            asset_id, content, embedding
+            asset_id,
+            asset.project_id,
+            asset.status,
+            content,
+            embedding,
         )
         await agents_uow.commit()
+
+        committed_asset = await project_client.get_asset_embedding_source(
+            asset_id
+        )
+        if committed_asset is None:
+            await agents_uow.asset_embedding_repository.delete_embedding(
+                asset_id
+            )
+            await agents_uow.commit()
+            logger.info('Skipping embedding for deleted asset_id=%s', asset_id)
+            return False
+        committed_content = (
+            f'title: {committed_asset.name} | '
+            f'text: {committed_asset.description or ""}'
+        )
+        if (
+            committed_content != content
+            or committed_asset.project_id != asset.project_id
+            or committed_asset.status != asset.status
+        ):
+            logger.info(
+                'Asset changed during embedding commit; refreshing asset_id=%s',
+                asset_id,
+            )
+            continue
+
         logger.info('Asset embedding saved: asset_id=%s', asset_id)
         return True
 

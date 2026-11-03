@@ -12,6 +12,7 @@ from agents.dtos.chat import (
 )
 from agents.dtos.message import CreateMessageDTO, MessageDTO
 from agents.dtos.page import CursorPage, PaginationDTO
+from agents.embedding_engine.factory import create_embedding_engine
 from agents.entities.message import SenderType
 from agents.exceptions import (
     ChatNotFoundException,
@@ -24,6 +25,7 @@ from agents.exceptions import (
 from agents.llm_engine.base import GenerationChunk, GenerationFinal
 from agents.llm_engine.factory import create_llm_engine
 from agents.unit_of_work import IAgentsUnitOfWork
+from agents.workflows.nodes.rag import RAGNode
 from agents.workflows.registry import workflow_registry_factory
 from infra.logs import get_logger
 from infra.settings import get_settings
@@ -140,18 +142,31 @@ async def send_message(
     api_key = await project_client.get_api_key(
         chat.project_id, user_id, api_key_id
     )
+    engine = create_llm_engine(
+        api_key=api_key, provider=get_settings().LLM_PROVIDER
+    )
+    rag_node = RAGNode(
+        engine=engine,
+        embedding_engine=create_embedding_engine(),
+        uow=uow,
+        project_client=project_client,
+    )
     workflow = workflow_registry_factory().get_workflow(
         'chat',
-        engine=create_llm_engine(
-            api_key=api_key, provider=get_settings().LLM_PROVIDER
-        ),
+        engine=engine,
+        rag_node=rag_node,
     )
     await uow.message_repository.create_human_message(chat_id, message.text)
     history = await uow.message_repository.get_messages_by_chat(
         chat_id, PaginationDTO(limit=100)
     )
     stream = workflow.stream(
-        str(chat_id), {'messages': list(reversed(history.items))}
+        str(chat_id),
+        {
+            'messages': list(reversed(history.items)),
+            'project_id': chat.project_id,
+            'user_id': user_id,
+        },
     )
 
     async def stream_response() -> AsyncIterator[dict[str, Any]]:

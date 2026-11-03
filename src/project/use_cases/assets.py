@@ -283,6 +283,8 @@ async def get_asset_file_url(
     project_id: int,
     user_id: int,
     asset_id: int,
+    *,
+    internal: bool = False,
 ) -> str:
     asset = await _get_asset_for_read(uow, project_id, user_id, asset_id)
     if asset.file is None:
@@ -297,6 +299,8 @@ async def get_asset_file_url(
     }
     if asset.content_type is not None:
         download_options['content_type'] = asset.content_type
+    if internal:
+        download_options['endpoint_url'] = get_settings().RUSTFS_ENDPOINT_URL
     return await storage.get_presigned_url(asset.file, **download_options)
 
 
@@ -512,6 +516,11 @@ async def delete_asset(
     )
     await uow.asset_repository.delete_asset(asset_id)
     await uow.commit()
+    send_task(
+        'agents.embeddings.delete_asset',
+        args=[asset_id],
+        queue=TaskQueue.LONG,
+    )
     if asset.file is not None:
         await storage.delete(asset.file)
     logger.info(
@@ -553,6 +562,11 @@ async def review_asset(
         {'old': asset.status.value, 'new': updated.status.value},
     )
     await uow.commit()
+    send_task(
+        'agents.embeddings.asset',
+        args=[asset_id],
+        queue=TaskQueue.LONG,
+    )
     logger.info(
         'Asset review completed: project_id=%s asset_id=%s accepted=%s',
         project_id,

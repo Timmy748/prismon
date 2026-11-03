@@ -127,15 +127,20 @@ async def test_send_message_stream_persists_unlinked_assistant_message(
     )
     project_client.get_api_key.assert_awaited_once_with(4, 9, 123)
     message_repository.create_human_message.assert_awaited_once_with(3, 'hello')
-    workflow_stub.registry.get_workflow.assert_called_once_with(
-        'chat', engine=workflow_stub.engine
-    )
+    workflow_call = workflow_stub.registry.get_workflow.call_args
+    assert workflow_call.args == ('chat',)
+    assert workflow_call.kwargs['engine'] is workflow_stub.engine
+    assert callable(workflow_call.kwargs['rag_node'].run)
     chat_use_cases.create_llm_engine.assert_called_once_with(
         api_key='api-secret', provider='openrouter'
     )
-    workflow_stub.workflow.stream.assert_called_once_with(
-        '3', {'messages': [previous_user, previous_assistant, user_message]}
-    )
+    stream_call = workflow_stub.workflow.stream.call_args
+    assert stream_call.args[0] == '3'
+    assert stream_call.args[1] == {
+        'messages': [previous_user, previous_assistant, user_message],
+        'project_id': 4,
+        'user_id': 9,
+    }
     message_repository.create_ai_message.assert_awaited_once_with(
         chat_id=3,
         parent_id=None,

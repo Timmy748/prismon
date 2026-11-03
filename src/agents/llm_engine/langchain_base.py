@@ -57,10 +57,51 @@ class LangChainEngine(ABC, ILLMEngine):
         ]
         for message in messages:
             if message.sender_type == SenderType.USER:
-                result.append(HumanMessage(content=message.text))
+                result.append(
+                    HumanMessage(
+                        content=LangChainEngine._message_content(message)
+                    )
+                )
             else:
                 result.append(AIMessage(content=message.text))
         return result
+
+    @staticmethod
+    def _message_content(message: MessageDTO) -> str | list[dict[str, Any]]:
+        """Convert internal base64 image payloads to LangChain image blocks.
+
+        The internal convention is ``payload['images']`` containing a list of
+        ``{'media_type': 'image/png', 'base64': '...'}`` objects. Images remain
+        separate LangChain image blocks and never enter the message text.
+        """
+        images = message.payload.get('images')
+        if images is None:
+            return message.text
+        if not isinstance(images, list):
+            raise TypeError("Message payload 'images' must be a list")
+        if not images:
+            return message.text
+
+        content: list[dict[str, Any]] = [{'type': 'text', 'text': message.text}]
+        for image in images:
+            if not isinstance(image, Mapping):
+                raise TypeError('Message image payload must be a mapping')
+            media_type = image.get('media_type')
+            encoded_image = image.get('base64')
+            if (
+                not isinstance(media_type, str)
+                or not media_type.startswith('image/')
+                or not isinstance(encoded_image, str)
+            ):
+                raise ValueError('Message image payload is invalid')
+            content.append(
+                {
+                    'type': 'image',
+                    'mime_type': media_type,
+                    'base64': encoded_image,
+                }
+            )
+        return content
 
     @staticmethod
     def _tool_calls(

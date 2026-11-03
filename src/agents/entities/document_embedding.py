@@ -1,5 +1,5 @@
 from pgvector.sqlalchemy import HALFVEC
-from sqlalchemy import Index, Integer, Text
+from sqlalchemy import Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agents.embedding_engine.ollama import EMBEDDING_DIMENSION
@@ -19,5 +19,7 @@ class DocumentEmbedding:
     )
 
     document_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     content: Mapped[str] = mapped_column(Text())
     embedding: Mapped[list[float]] = mapped_column(HALFVEC(EMBEDDING_DIMENSION))

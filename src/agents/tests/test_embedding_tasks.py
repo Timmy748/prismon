@@ -79,3 +79,28 @@ async def test_embedding_async_context_delegates_to_use_case(
     )
     agents_uow.__aenter__.assert_awaited_once()
     agents_uow.__aexit__.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    ('async_context_name', 'repository_name', 'resource_id'),
+    [
+        ('_delete_document_embedding', 'document_embedding_repository', 17),
+        ('_delete_asset_embedding', 'asset_embedding_repository', 28),
+    ],
+)
+@pytest.mark.asyncio
+async def test_delete_embedding_task_removes_stale_row_and_commits(
+    monkeypatch, async_context_name, repository_name, resource_id
+):
+    repository = AsyncMock()
+    agents_uow = AsyncMock()
+    agents_uow.__aenter__.return_value = agents_uow
+    setattr(agents_uow, repository_name, repository)
+    monkeypatch.setattr(tasks, 'create_agents_unit_of_work', lambda: agents_uow)
+
+    await getattr(tasks, async_context_name)(resource_id)
+
+    repository.delete_embedding.assert_awaited_once_with(resource_id)
+    agents_uow.commit.assert_awaited_once()
+    agents_uow.__aenter__.assert_awaited_once()
+    agents_uow.__aexit__.assert_awaited_once()

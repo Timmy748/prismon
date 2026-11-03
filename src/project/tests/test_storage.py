@@ -256,6 +256,17 @@ async def test_presigned_view_url_uses_public_endpoint_and_configured_ttl(
 
 
 @pytest.mark.asyncio
+async def test_internal_presigned_view_url_uses_internal_endpoint(
+    rustfs_storage,
+):
+    adapter, _, session = rustfs_storage
+
+    await adapter.get_presigned_url('file', endpoint_url='http://rustfs:9000')
+
+    assert session.client_calls[0][1]['endpoint_url'] == 'http://rustfs:9000'
+
+
+@pytest.mark.asyncio
 async def test_presigned_download_url_encodes_filename(rustfs_storage):
     adapter, client, _ = rustfs_storage
 

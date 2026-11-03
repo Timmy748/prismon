@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from infra.tasks import TaskQueue, send_task
 from project.dtos.asset import AssetUploadCompletionDTO
 from project.dtos.document import DocumentUploadCompletionDTO
 from project.dtos.upload_intent import UploadIntentDTO
@@ -14,6 +15,14 @@ from project.exceptions import (
 from project.storage import IStorage
 from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.resource_events import record_resource_event
+
+
+def _enqueue_embedding_refresh(resource_type: str, resource_id: int) -> None:
+    send_task(
+        f'agents.embeddings.{resource_type}',
+        args=[resource_id],
+        queue=TaskQueue.LONG,
+    )
 
 
 # ruff: noqa: PLR0913
@@ -79,6 +88,11 @@ async def finalize_upload(
         return None
 
     await uow.commit()
+    if not completion.already_completed and not completion.ignored:
+        if intent.asset_id is not None:
+            _enqueue_embedding_refresh('asset', intent.asset_id)
+        elif intent.document_id is not None:
+            _enqueue_embedding_refresh('document', intent.document_id)
     await _delete_objects(storage, (object_key, completion.obsolete_file_key))
     return completion
 
@@ -104,6 +118,9 @@ async def complete_asset_upload(
         return AssetUploadCompletionDTO(None, None, False, ignored=True)
     completion = await _complete_asset_upload(uow, intent, object_key)
     await uow.commit()
+    if not completion.already_completed and not completion.ignored:
+        if completion.asset_id is not None:
+            _enqueue_embedding_refresh('asset', completion.asset_id)
     return completion
 
 
@@ -129,6 +146,9 @@ async def complete_document_upload(
         return DocumentUploadCompletionDTO(None, None, False, ignored=True)
     completion = await _complete_document_upload(uow, intent, object_key)
     await uow.commit()
+    if not completion.already_completed and not completion.ignored:
+        if completion.document_id is not None:
+            _enqueue_embedding_refresh('document', completion.document_id)
     return completion
 
 
@@ -295,7 +315,7 @@ async def _fail_expired_upload(
     if resource_type == 'asset':
         resource = await uow.asset_repository.get_asset(resource_id)
         if resource is None:
-            pass
+            changed = False
         else:
             status = (
                 AssetStatus(intent.target_status)
@@ -307,6 +327,7 @@ async def _fail_expired_upload(
             )
             if updated is None:
                 raise AssetNotFoundException(resource_id)
+            changed = True
     else:
         resource = await uow.document_repository.get_document(resource_id)
         if resource is not None and resource.status is DocumentStatus.UPLOADING:
@@ -320,6 +341,9 @@ async def _fail_expired_upload(
             )
             if updated is None:
                 raise DocumentNotFoundException(resource_id)
+            changed = True
+        else:
+            changed = False
 
     await record_resource_event(
         uow,
@@ -338,6 +362,8 @@ async def _fail_expired_upload(
     )
     await uow.upload_intent_repository.delete_upload_intent(intent.id)
     await uow.commit()
+    if changed:
+        _enqueue_embedding_refresh(resource_type, resource_id)
 
 
 def _resource_for_intent(

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from infra.tasks import TaskQueue
 from project.dtos.document import (
     ApproveDocumentDTO,
     CreateDocumentDTO,
@@ -482,7 +483,9 @@ async def test_update_document_does_not_clean_storage_without_replacement(
 
 
 @pytest.mark.asyncio
-async def test_delete_document_removes_record_and_file(repos, storage):
+async def test_delete_document_removes_record_and_file(
+    repos, storage, stub_embedding_enqueue
+):
     project_repo, member_repo, document_repo = repos
     unit_of_work = make_unit_of_work(
         project_repo, member_repo, document_repo=document_repo
@@ -491,6 +494,11 @@ async def test_delete_document_removes_record_and_file(repos, storage):
     await delete_document(unit_of_work, storage, 1, 20, 4)
     document_repo.delete_document.assert_awaited_once_with(4)
     assert storage.deleted == ['old-key']
+    stub_embedding_enqueue.assert_called_once_with(
+        'agents.embeddings.delete_document',
+        args=[4],
+        queue=TaskQueue.LONG,
+    )
 
 
 @pytest.mark.asyncio
@@ -525,7 +533,9 @@ async def test_delete_document_rejects_uploading_document(repos, storage):
     ('accept', 'status'),
     [(True, DocumentStatus.PUBLISHED), (False, DocumentStatus.DRAFT)],
 )
-async def test_review_document_changes_status(repos, accept, status):
+async def test_review_document_changes_status(
+    repos, accept, status, stub_embedding_enqueue
+):
     project_repo, member_repo, document_repo = repos
     unit_of_work = make_unit_of_work(
         project_repo, member_repo, document_repo=document_repo
@@ -548,6 +558,9 @@ async def test_review_document_changes_status(repos, accept, status):
         'old': DocumentStatus.PENDING.value,
         'new': status.value,
     }
+    stub_embedding_enqueue.assert_called_once_with(
+        'agents.embeddings.document', args=[4], queue=TaskQueue.LONG
+    )
 
 
 @pytest.mark.asyncio

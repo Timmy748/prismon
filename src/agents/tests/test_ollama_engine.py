@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -10,6 +11,8 @@ from langchain_core.messages import (
     SystemMessage,
 )
 
+from agents.dtos.message import MessageDTO
+from agents.entities.message import SenderType
 from agents.llm_engine.base import (
     GenerationChunk,
     GenerationFinal,
@@ -168,6 +171,29 @@ def test_tool_calls_skips_non_mapping_entries():
     calls = OllamaEngine._tool_calls(response)
 
     assert calls == []
+
+
+def test_langchain_message_conversion_keeps_image_base64_out_of_text():
+    now = datetime.now(UTC)
+    message = MessageDTO(
+        id=0,
+        chat_id=1,
+        parent_id=None,
+        sender_type=SenderType.USER,
+        text='Describe the selected asset.',
+        payload={'images': [{'media_type': 'image/png', 'base64': 'cGl4ZWxz'}]},
+        meta_data={},
+        created_at=now,
+        updated_at=now,
+    )
+
+    converted = OllamaEngine._to_langchain_messages([message], 'instructions')
+
+    assert converted[1].content == [
+        {'type': 'text', 'text': 'Describe the selected asset.'},
+        {'type': 'image', 'mime_type': 'image/png', 'base64': 'cGl4ZWxz'},
+    ]
+    assert 'cGl4ZWxz' not in str(converted[1].content[0])
 
 
 def test_metadata_avoids_zero_duration_generation_rate():

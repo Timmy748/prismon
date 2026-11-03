@@ -12,6 +12,7 @@ from agents.unit_of_work import IAgentsUnitOfWork
 from agents.use_cases.embeddings import embed_asset, embed_document
 
 EXPECTED_ATTEMPTS_AFTER_METADATA_CHANGE = 2
+EXPECTED_COMMITS_AFTER_POST_COMMIT_DELETE = 2
 
 
 def _agents_uow(resource_type):
@@ -31,7 +32,7 @@ def _agents_uow(resource_type):
 async def test_embed_document_saves_combined_metadata_and_embedding():
     project_client = AsyncMock(spec=IProjectClient)
     project_client.get_document_embedding_source.return_value = (
-        EmbeddingSourceDTO('Guide', 'Setup steps')
+        EmbeddingSourceDTO('Guide', 'Setup steps', 4, 'published')
     )
     agents_uow, embedding_repo = _agents_uow('document')
     engine = AsyncMock(spec=IEmbeddingEngine)
@@ -44,6 +45,8 @@ async def test_embed_document_saves_combined_metadata_and_embedding():
     engine.embedding_document.assert_awaited_once_with('Guide', 'Setup steps')
     embedding_repo.upsert_embedding.assert_awaited_once_with(
         17,
+        4,
+        'published',
         'title: Guide | text: Setup steps',
         vector,
     )
@@ -54,7 +57,7 @@ async def test_embed_document_saves_combined_metadata_and_embedding():
 async def test_embed_asset_saves_combined_metadata_and_embedding():
     project_client = AsyncMock(spec=IProjectClient)
     project_client.get_asset_embedding_source.return_value = EmbeddingSourceDTO(
-        'Red box', 'Front view'
+        'Red box', 'Front view', 4, 'active'
     )
     agents_uow, embedding_repo = _agents_uow('asset')
     engine = AsyncMock(spec=IEmbeddingEngine)
@@ -67,6 +70,8 @@ async def test_embed_asset_saves_combined_metadata_and_embedding():
     engine.embedding_asset.assert_awaited_once_with('Red box', 'Front view')
     embedding_repo.upsert_embedding.assert_awaited_once_with(
         28,
+        4,
+        'active',
         'title: Red box | text: Front view',
         vector,
     )
@@ -75,11 +80,16 @@ async def test_embed_asset_saves_combined_metadata_and_embedding():
 
 @pytest.mark.asyncio
 async def test_embed_document_recomputes_when_metadata_changes_mid_request():
-    old_document = EmbeddingSourceDTO('Old title', 'Old description')
-    new_document = EmbeddingSourceDTO('New title', 'New description')
+    old_document = EmbeddingSourceDTO(
+        'Old title', 'Old description', 4, 'published'
+    )
+    new_document = EmbeddingSourceDTO(
+        'New title', 'New description', 4, 'published'
+    )
     project_client = AsyncMock(spec=IProjectClient)
     project_client.get_document_embedding_source.side_effect = [
         old_document,
+        new_document,
         new_document,
         new_document,
         new_document,
@@ -101,10 +111,38 @@ async def test_embed_document_recomputes_when_metadata_changes_mid_request():
     )
     embedding_repo.upsert_embedding.assert_awaited_once_with(
         17,
+        4,
+        'published',
         'title: New title | text: New description',
         latest_vector,
     )
     agents_uow.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_embed_document_removes_upsert_after_resource_deletion():
+    document = EmbeddingSourceDTO('Guide', 'Setup steps', 4, 'published')
+    project_client = AsyncMock(spec=IProjectClient)
+    project_client.get_document_embedding_source.side_effect = [
+        document,
+        document,
+        None,
+    ]
+    agents_uow, embedding_repo = _agents_uow('document')
+    engine = AsyncMock(spec=IEmbeddingEngine)
+    engine.embedding_document.return_value = np.asarray(
+        [0.2, 0.8], dtype=np.float32
+    )
+
+    result = await embed_document(project_client, agents_uow, engine, 17)
+
+    assert result is False
+    embedding_repo.upsert_embedding.assert_awaited_once()
+    embedding_repo.delete_embedding.assert_awaited_once_with(17)
+    assert (
+        agents_uow.commit.await_count
+        == EXPECTED_COMMITS_AFTER_POST_COMMIT_DELETE
+    )
 
 
 @pytest.mark.asyncio

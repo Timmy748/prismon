@@ -27,9 +27,27 @@ class IProjectClient(Protocol):
         self, document_id: int
     ) -> EmbeddingSourceDTO | None: ...
 
+    async def get_document_file_url(
+        self,
+        project_id: int,
+        user_id: int,
+        document_id: int,
+        *,
+        internal: bool = False,
+    ) -> str: ...
+
     async def get_asset_embedding_source(
         self, asset_id: int
     ) -> EmbeddingSourceDTO | None: ...
+
+    async def get_asset_file_url(
+        self,
+        project_id: int,
+        user_id: int,
+        asset_id: int,
+        *,
+        internal: bool = False,
+    ) -> str: ...
 
     async def has_permission(
         self, project_id: int, user_id: int, permission: ProjectPermission
@@ -59,7 +77,27 @@ class ProjectClient:
         )
         if document is None:
             return None
-        return EmbeddingSourceDTO(document.name, document.description)
+        return EmbeddingSourceDTO(
+            document.name,
+            document.description,
+            document.project_id,
+            document.status.value,
+        )
+
+    async def get_document_file_url(
+        self,
+        project_id: int,
+        user_id: int,
+        document_id: int,
+        *,
+        internal: bool = False,
+    ) -> str:
+        return await self._project_api.get_document_file_url(
+            project_id,
+            user_id,
+            document_id,
+            **({'internal': True} if internal else {}),
+        )
 
     async def get_asset_embedding_source(
         self, asset_id: int
@@ -67,7 +105,27 @@ class ProjectClient:
         asset = await self._project_api.get_asset_embedding_source(asset_id)
         if asset is None:
             return None
-        return EmbeddingSourceDTO(asset.name, asset.description)
+        return EmbeddingSourceDTO(
+            asset.name,
+            asset.description,
+            asset.project_id,
+            asset.status.value,
+        )
+
+    async def get_asset_file_url(
+        self,
+        project_id: int,
+        user_id: int,
+        asset_id: int,
+        *,
+        internal: bool = False,
+    ) -> str:
+        return await self._project_api.get_asset_file_url(
+            project_id,
+            user_id,
+            asset_id,
+            **({'internal': True} if internal else {}),
+        )
 
     async def has_permission(
         self, project_id: int, user_id: int, permission: ProjectPermission

@@ -66,6 +66,48 @@ async def test_public_api_get_documents_rejects_unknown_project(
 
 
 @pytest.mark.asyncio
+async def test_public_api_document_url_uses_authorized_document_use_case(
+    monkeypatch, public_api
+):
+    use_case = AsyncMock(return_value='https://rustfs.test/signed')
+    monkeypatch.setattr(public_api_module, 'get_document_file_url', use_case)
+    uow = public_api.unit_of_work_factory()
+    storage = public_api.storage_factory()
+
+    result = await public_api.get_document_file_url(7, 9, 17)
+
+    assert result == 'https://rustfs.test/signed'
+    use_case.assert_awaited_once_with(
+        uow=uow,
+        storage=storage,
+        project_id=7,
+        user_id=9,
+        document_id=17,
+    )
+
+
+@pytest.mark.asyncio
+async def test_public_api_asset_url_uses_authorized_asset_use_case(
+    monkeypatch, public_api
+):
+    use_case = AsyncMock(return_value='https://rustfs.test/asset-signed')
+    monkeypatch.setattr(public_api_module, 'get_asset_file_url', use_case)
+    uow = public_api.unit_of_work_factory()
+    storage = public_api.storage_factory()
+
+    result = await public_api.get_asset_file_url(7, 9, 42)
+
+    assert result == 'https://rustfs.test/asset-signed'
+    use_case.assert_awaited_once_with(
+        uow=uow,
+        storage=storage,
+        project_id=7,
+        user_id=9,
+        asset_id=42,
+    )
+
+
+@pytest.mark.asyncio
 async def test_public_api_get_documents_rejects_nonmember(
     mock_member_repo, public_api
 ):

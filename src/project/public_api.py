@@ -18,8 +18,8 @@ from project.unit_of_work import (
     create_project_unit_of_work,
 )
 from project.use_cases.api_key import get_api_key
-from project.use_cases.assets import get_assets
-from project.use_cases.documents import get_documents
+from project.use_cases.assets import get_asset_file_url, get_assets
+from project.use_cases.documents import get_document_file_url, get_documents
 
 logger = get_logger(__name__)
 
@@ -57,6 +57,44 @@ class ProjectPublicAPI:
     ) -> AssetDTO | None:
         async with self.unit_of_work_factory() as unit_of_work:
             return await unit_of_work.asset_repository.get_asset(asset_id)
+
+    async def get_document_file_url(
+        self,
+        project_id: int,
+        user_id: int,
+        document_id: int,
+        *,
+        internal: bool = False,
+    ) -> str:
+        """Return an authorized, short-lived URL for a document file."""
+        async with self.unit_of_work_factory() as unit_of_work:
+            return await get_document_file_url(
+                uow=unit_of_work,
+                storage=self.storage_factory(),
+                project_id=project_id,
+                user_id=user_id,
+                document_id=document_id,
+                **({'internal': True} if internal else {}),
+            )
+
+    async def get_asset_file_url(
+        self,
+        project_id: int,
+        user_id: int,
+        asset_id: int,
+        *,
+        internal: bool = False,
+    ) -> str:
+        """Return an authorized, short-lived URL for an asset file."""
+        async with self.unit_of_work_factory() as unit_of_work:
+            return await get_asset_file_url(
+                uow=unit_of_work,
+                storage=self.storage_factory(),
+                project_id=project_id,
+                user_id=user_id,
+                asset_id=asset_id,
+                **({'internal': True} if internal else {}),
+            )
 
     async def get_api_key(
         self, project_id: int, user_id: int, api_key_id: int

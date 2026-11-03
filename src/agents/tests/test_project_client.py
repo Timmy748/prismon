@@ -143,6 +143,70 @@ async def test_get_api_key_delegates_to_project_public_api():
 
 
 @pytest.mark.asyncio
+async def test_get_document_file_url_delegates_project_scope_and_user():
+    project_api = Mock()
+    project_api.get_document_file_url = AsyncMock(
+        return_value='https://rustfs.test/signed'
+    )
+    client = ProjectClient(project_api)
+
+    result = await client.get_document_file_url(3, 9, 123)
+
+    assert result == 'https://rustfs.test/signed'
+    project_api.get_document_file_url.assert_awaited_once_with(3, 9, 123)
+
+
+@pytest.mark.asyncio
+async def test_get_document_file_url_can_target_internal_storage_endpoint():
+    project_api = Mock()
+    project_api.get_document_file_url = AsyncMock(
+        return_value='http://rustfs:9000/signed'
+    )
+    client = ProjectClient(project_api)
+
+    result = await client.get_document_file_url(3, 9, 123, internal=True)
+
+    assert result == 'http://rustfs:9000/signed'
+    project_api.get_document_file_url.assert_awaited_once_with(
+        3, 9, 123, internal=True
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_asset_file_url_delegates_project_scope_and_user():
+    project_api = Mock()
+    project_api.get_asset_file_url = AsyncMock(
+        return_value='https://rustfs.test/asset-signed'
+    )
+    client = ProjectClient(project_api)
+
+    result = await client.get_asset_file_url(3, 9, 123)
+
+    assert result == 'https://rustfs.test/asset-signed'
+    project_api.get_asset_file_url.assert_awaited_once_with(3, 9, 123)
+
+
+@pytest.mark.asyncio
+async def test_embedding_source_preserves_project_and_status_metadata():
+    project_id = 3
+    document = SimpleNamespace(
+        name='Guide',
+        description='Setup',
+        project_id=project_id,
+        status=SimpleNamespace(value='published'),
+    )
+    project_api = Mock()
+    project_api.get_document_embedding_source = AsyncMock(return_value=document)
+    client = ProjectClient(project_api)
+
+    source = await client.get_document_embedding_source(123)
+
+    assert source.project_id == project_id
+    assert source.status == 'published'
+    project_api.get_document_embedding_source.assert_awaited_once_with(123)
+
+
+@pytest.mark.asyncio
 async def test_get_api_key_translates_missing_key_exception():
     project_api = Mock()
     project_api.get_api_key = AsyncMock(

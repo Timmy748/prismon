@@ -40,7 +40,7 @@ services:
   postgres_db:
     image: paradedb/paradedb:0.26.4-pg16
     volumes: 
-      - pg_data:/var/lib/postgresql/
+      - pg_data:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_DB: ${POSTGRES_DB}
@@ -202,7 +202,7 @@ services:
 
 volumes:
   pg_data:
-    name: pg_data
+    name: prismon_postgres_data_v2
   ollama_data:
     name: ollama_data
   rustfs_data:

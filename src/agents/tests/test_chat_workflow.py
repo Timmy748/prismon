@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 import pytest
 from langgraph.graph.state import CompiledStateGraph
 
@@ -9,6 +11,7 @@ from agents.llm_engine.base import (
 )
 from agents.workflows.base import WorkflowExecution
 from agents.workflows.chat import ChatWorkflow
+from agents.workflows.nodes.rag import RAGInput, RAGResult, SelectedRAGSource
 
 
 @pytest.mark.asyncio
@@ -82,6 +85,55 @@ async def test_chat_workflow_stream_emits_chunks_then_final_generation(
     assert events[-1].raw_text == 'model answer'
 
 
+@pytest.mark.asyncio
+async def test_chat_workflow_injects_selected_rag_context_into_response_prompt(
+    chat_workflow_engine, message_history
+):
+    project_id = 7
+    user_id = 9
+
+    rag_node = AsyncMock()
+    rag_node.run.return_value = RAGResult(
+        question=message_history[-1].text,
+        search_query='handbook question',
+        candidates=(),
+        selected_sources=(
+            SelectedRAGSource(
+                resource_type='document',
+                resource_id=17,
+                rank=1,
+                rrf_score=0.03,
+                text='Relevant text',
+            ),
+        ),
+    )
+
+    workflow = ChatWorkflow(
+        engine=chat_workflow_engine,
+        rag_node=rag_node,
+    )
+
+    events = [
+        event
+        async for event in workflow.stream(
+            'thread-1',
+            {
+                'messages': message_history,
+                'project_id': project_id,
+                'user_id': user_id,
+            },
+        )
+    ]
+
+    prompt = chat_workflow_engine.stream.call_args.args[1]
+    assert '[document 17]\nRelevant text' in prompt
+    assert 'Cite sources using [resource type ID]' in prompt
+    assert isinstance(events[-1], GenerationFinal)
+    rag_node.run.assert_awaited_once_with(
+        RAGInput(message_history[-1].text, project_id, user_id)
+    )
+
+
 def test_chat_workflow_builds_compiled_graph(chat_workflow_engine):
     workflow = ChatWorkflow(engine=chat_workflow_engine)
 
@@ -120,7 +172,7 @@ async def test_chat_workflow_run_rejects_engine_stream_without_final(
     chat_workflow_engine.stream.side_effect = chunks_only
     workflow = ChatWorkflow(engine=chat_workflow_engine)
 
-    with pytest.raises(RuntimeError, match='without a final generation'):
+    with pytest.raises(RuntimeError, match='no final generation'):
         await workflow.run('thread-1', {'messages': message_history})
 
 

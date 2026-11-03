@@ -5,3 +5,5 @@ from dataclasses import dataclass
 class EmbeddingSourceDTO:
     name: str
     description: str | None
+    project_id: int
+    status: str
