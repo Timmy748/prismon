@@ -31,7 +31,6 @@ from identity.use_cases.user import (
     change_password,
     create_user,
     get_current_user,
-    get_user_by_id,
     update_user,
 )
 from infra.logs import get_logger
@@ -46,7 +45,7 @@ def create_user_router(
         create_identity_unit_of_work
     ),
 ) -> APIRouter:
-    router = APIRouter(prefix='/users', tags=['users'])
+    router = APIRouter(tags=['users'])
 
     async def resolve_identity_user(
         uow: IIdentityUnitOfWork, access_token: str
@@ -65,7 +64,9 @@ def create_user_router(
             raise InvalidTokenException()
         return await resolve_identity_user(uow, access_token)
 
-    @router.post('', response_model=UserSchema, status_code=HTTPStatus.CREATED)
+    @router.post(
+        '/users', response_model=UserSchema, status_code=HTTPStatus.CREATED
+    )
     async def post_user(
         data: CreateUserSchema,
     ) -> UserDTO | JSONResponse:
@@ -84,18 +85,18 @@ def create_user_router(
             logger.warning('User creation rejected: %s', type(error).__name__)
             return handle_identity_error(error)
 
-    @router.get('/{user_id}', response_model=UserSchema)
-    async def get_user(
-        user_id: int,
-    ) -> UserDTO | JSONResponse:
+    @router.get('/me', response_model=UserSchema)
+    async def get_me(request: Request) -> UserDTO | JSONResponse:
         try:
             async with unit_of_work_factory() as uow:
-                return await get_user_by_id(uow, user_id)
+                return await resolve_current_user(uow, request.cookies)
         except IdentityException as error:
-            logger.warning('User lookup rejected: %s', type(error).__name__)
+            logger.warning(
+                'Current user lookup rejected: %s', type(error).__name__
+            )
             return handle_identity_error(error)
 
-    @router.put('', response_model=UserSchema)
+    @router.put('/me', response_model=UserSchema)
     async def put_user(
         request: Request,
         data: UpdateUserSchema,
@@ -112,7 +113,7 @@ def create_user_router(
             logger.warning('User update rejected: %s', type(error).__name__)
             return handle_identity_error(error)
 
-    @router.patch('/change-password', response_model=UserSchema)
+    @router.patch('/me/change-password', response_model=UserSchema)
     async def patch_password(
         request: Request,
         data: UpdateUserPasswordSchema,

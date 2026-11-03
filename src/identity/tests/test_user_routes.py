@@ -71,9 +71,10 @@ async def test_post_user_identity_exception_handled(
 
 
 @pytest.mark.asyncio
-async def test_get_user_success(
+async def test_get_me_success(
     user_client: AsyncClient,
     mock_user_repo,
+    mock_token_provider,
 ):
     now = datetime.now(timezone.utc)
     mock_user = UserDTO(
@@ -84,9 +85,12 @@ async def test_get_user_success(
         created_at=now,
         updated_at=now,
     )
+    mock_token_provider.decode_access_token.return_value = {'sub': '1'}
     mock_user_repo.get_user_by_id.return_value = mock_user
 
-    response = await user_client.get('/users/1')
+    response = await user_client.get(
+        '/me', cookies={'jwt': 'valid-access-token'}
+    )
 
     assert response.status_code == HTTPStatus.OK
     data = response.json()
@@ -95,15 +99,22 @@ async def test_get_user_success(
 
 
 @pytest.mark.asyncio
-async def test_get_user_not_found_returns_error_handled(
+async def test_get_me_unauthorized_without_access_token(
     user_client: AsyncClient,
-    mock_user_repo,
 ):
-    mock_user_repo.get_user_by_id.return_value = None
+    response = await user_client.get('/me')
 
-    response = await user_client.get('/users/999')
+    assert response.status_code in (
+        HTTPStatus.UNAUTHORIZED,
+        HTTPStatus.BAD_REQUEST,
+    )
 
-    assert response.status_code != HTTPStatus.OK
+
+@pytest.mark.asyncio
+async def test_get_user_by_id_route_is_removed(user_client: AsyncClient):
+    response = await user_client.get('/users/1')
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
 
 
 @pytest.mark.asyncio
@@ -127,7 +138,7 @@ async def test_put_user_success(
     mock_user_repo.update_user.return_value = mock_user
 
     response = await user_client.put(
-        '/users',
+        '/me',
         json={'username': 'ana_updated', 'email': 'ana_updated@example.com'},
         cookies={'jwt': 'valid-access-token'},
     )
@@ -141,7 +152,7 @@ async def test_put_user_success(
 @pytest.mark.asyncio
 async def test_put_user_unauthorized(user_client: AsyncClient):
     response = await user_client.put(
-        '/users',
+        '/me',
         json={'username': 'ana_updated', 'email': 'ana_updated@example.com'},
     )
 
@@ -174,7 +185,7 @@ async def test_patch_password_success(
     mock_user_repo.change_user_password.return_value = mock_user
 
     response = await user_client.patch(
-        '/users/change-password',
+        '/me/change-password',
         json={
             'old_password': 'old_password_123',
             'new_password': 'new_password_123',
@@ -190,7 +201,7 @@ async def test_patch_password_success(
 @pytest.mark.asyncio
 async def test_patch_password_unauthorized(user_client: AsyncClient):
     response = await user_client.patch(
-        '/users/change-password',
+        '/me/change-password',
         json={
             'old_password': 'old_password_123',
             'new_password': 'new_password_123',
