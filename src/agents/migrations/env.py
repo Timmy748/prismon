@@ -1,14 +1,14 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
+from agents.entities.asset_embedding import AssetEmbedding  # noqa: F401
+from agents.entities.chat import Chat  # noqa: F401
+from agents.entities.document_embedding import DocumentEmbedding  # noqa: F401
+from agents.entities.message import Message  # noqa: F401
 from agents.entities.registry import mapper_registry
-from agents.entities.chat import Chat
-from agents.entities.message import Message
-from agents.entities.workflow import Workflow 
+from agents.entities.workflow import Workflow  # noqa: F401
 from infra.settings import get_settings
 
 # this is the Alembic Config object, which provides

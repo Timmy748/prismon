@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     # Agents and LLM providers
     OLLAMA_BASE_URL: str = 'http://ollama:11434'
     OLLAMA_MODEL: str = 'bonsai-2:4b'
+    OLLAMA_EMBEDDING_MODEL: str = 'embeddinggemma-2:270m-q8_0-text'
     OLLAMA_TEMPERATURE: float = 0.0
     LLM_PROVIDER: str = 'ollama'
     OPENROUTER_MODEL: str = ''

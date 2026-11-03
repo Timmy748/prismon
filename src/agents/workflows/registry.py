@@ -1,6 +1,7 @@
 from importlib import import_module
 from pkgutil import iter_modules
 from types import ModuleType
+from typing import Any
 
 import agents.workflows as workflows_package
 from agents.llm_engine.base import ILLMEngine
@@ -43,7 +44,12 @@ class WorkflowRegistry:
         )
         return workflow_class
 
-    def get_workflow(self, name: str, engine: ILLMEngine) -> WorkflowExecution:
+    def get_workflow(
+        self,
+        name: str,
+        engine: ILLMEngine,
+        **dependencies: Any,
+    ) -> WorkflowExecution:
         try:
             workflow_class = self._workflows[name]
         except KeyError as error:
@@ -52,7 +58,7 @@ class WorkflowRegistry:
             )
             raise KeyError(f'Workflow {name!r} is not registered') from error
         logger.debug('Creating workflow instance: name=%s', name)
-        return workflow_class(engine=engine)
+        return workflow_class(engine=engine, **dependencies)
 
     def list_workflows(self) -> list[type[WorkflowExecution]]:
         return list(self._workflows.values())

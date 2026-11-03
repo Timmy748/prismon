@@ -3,7 +3,9 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 import agents.unit_of_work as unit_of_work_module
+from agents.repositories.asset_embedding import AssetEmbeddingRepository
 from agents.repositories.chat import ChatRepository
+from agents.repositories.document_embedding import DocumentEmbeddingRepository
 from agents.repositories.message import MessageRepository
 from agents.repositories.workflow import WorkflowRepository
 from agents.unit_of_work import AgentsUnitOfWork, create_agents_unit_of_work
@@ -16,6 +18,8 @@ async def test_unit_of_work_builds_all_repositories_from_one_session():
     chat_repository = Mock(spec=ChatRepository)
     message_repository = Mock(spec=MessageRepository)
     workflow_repository = Mock(spec=WorkflowRepository)
+    document_embedding_repository = Mock(spec=DocumentEmbeddingRepository)
+    asset_embedding_repository = Mock(spec=AssetEmbeddingRepository)
 
     with (
         patch(
@@ -30,18 +34,36 @@ async def test_unit_of_work_builds_all_repositories_from_one_session():
             'agents.unit_of_work.WorkflowRepository',
             return_value=workflow_repository,
         ) as workflow_factory,
+        patch(
+            'agents.unit_of_work.DocumentEmbeddingRepository',
+            return_value=document_embedding_repository,
+        ) as document_embedding_factory,
+        patch(
+            'agents.unit_of_work.AssetEmbeddingRepository',
+            return_value=asset_embedding_repository,
+        ) as asset_embedding_factory,
     ):
         async with AgentsUnitOfWork(session_factory) as uow:
             assert (
                 uow.chat_repository,
                 uow.message_repository,
                 uow.workflow_repository,
-            ) == (chat_repository, message_repository, workflow_repository)
+                uow.document_embedding_repository,
+                uow.asset_embedding_repository,
+            ) == (
+                chat_repository,
+                message_repository,
+                workflow_repository,
+                document_embedding_repository,
+                asset_embedding_repository,
+            )
 
     session_factory.assert_called_once_with()
     chat_factory.assert_called_once_with(session)
     message_factory.assert_called_once_with(session)
     workflow_factory.assert_called_once_with(session)
+    document_embedding_factory.assert_called_once_with(session)
+    asset_embedding_factory.assert_called_once_with(session)
     session.close.assert_awaited_once()
 
 
@@ -107,6 +129,10 @@ async def test_unit_of_work_operations_require_active_context():
         _ = uow.message_repository
     with pytest.raises(RuntimeError, match='only inside the context'):
         _ = uow.workflow_repository
+    with pytest.raises(RuntimeError, match='only inside the context'):
+        _ = uow.document_embedding_repository
+    with pytest.raises(RuntimeError, match='only inside the context'):
+        _ = uow.asset_embedding_repository
 
 
 @pytest.mark.asyncio

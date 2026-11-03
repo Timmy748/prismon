@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from infra.tasks import TaskQueue
 from project.dtos.asset import AssetDTO
 from project.dtos.document import DocumentDTO
 from project.dtos.upload_intent import UploadIntentDTO
@@ -218,7 +219,9 @@ async def test_finalize_rejects_staging_object_not_yet_visible():
 
 
 @pytest.mark.asyncio
-async def test_finalize_asset_promotes_file_commits_and_cleans_old_file():
+async def test_finalize_asset_promotes_file_commits_and_cleans_old_file(
+    stub_embedding_enqueue,
+):
     uow = _uow()
     intent = _intent()
     uow.upload_intent_repository.get_by_object_key_for_update.return_value = (
@@ -233,6 +236,9 @@ async def test_finalize_asset_promotes_file_commits_and_cleans_old_file():
         intent.object_key, intent.final_file_key
     )
     uow.commit.assert_awaited_once()
+    stub_embedding_enqueue.assert_called_once_with(
+        'agents.embeddings.asset', args=[ASSET_ID], queue=TaskQueue.LONG
+    )
     assert [call.args[0] for call in storage.delete.await_args_list] == [
         intent.object_key,
         intent.previous_file_key,
@@ -240,7 +246,9 @@ async def test_finalize_asset_promotes_file_commits_and_cleans_old_file():
 
 
 @pytest.mark.asyncio
-async def test_finalize_document_promotes_file_without_old_file_cleanup():
+async def test_finalize_document_promotes_file_without_old_file_cleanup(
+    stub_embedding_enqueue,
+):
     uow = _uow()
     intent = _intent(
         asset_id=None,
@@ -260,6 +268,11 @@ async def test_finalize_document_promotes_file_without_old_file_cleanup():
     assert result.document_id == DOCUMENT_ID
     storage.delete.assert_awaited_once_with(intent.object_key)
     uow.commit.assert_awaited_once()
+    stub_embedding_enqueue.assert_called_once_with(
+        'agents.embeddings.document',
+        args=[DOCUMENT_ID],
+        queue=TaskQueue.LONG,
+    )
 
 
 @pytest.mark.asyncio

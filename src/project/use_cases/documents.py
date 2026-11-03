@@ -1,9 +1,10 @@
-# ruff: noqa: PLR0913, PLR0917
+# ruff: noqa: PLR0912, PLR0913, PLR0917
 from datetime import UTC, datetime, timedelta
 from secrets import token_hex
 
 from infra.logs import get_logger
 from infra.settings import get_settings
+from infra.tasks import TaskQueue, send_task
 from project.dtos.document import (
     ApproveDocumentDTO,
     CreateDocumentDTO,
@@ -138,6 +139,8 @@ async def get_document_file_url(
     project_id: int,
     user_id: int,
     document_id: int,
+    *,
+    internal: bool = False,
 ) -> str:
     document = await _get_document_for_read(
         uow, project_id, user_id, document_id
@@ -150,6 +153,8 @@ async def get_document_file_url(
     }
     if document.content_type is not None:
         download_options['content_type'] = document.content_type
+    if internal:
+        download_options['endpoint_url'] = get_settings().RUSTFS_ENDPOINT_URL
     return await storage.get_presigned_url(document.file, **download_options)
 
 
@@ -240,6 +245,11 @@ async def start_document_upload(
         {'object_key': key, 'expires_at': expires_at.isoformat()},
     )
     await uow.commit()
+    send_task(
+        'agents.embeddings.document',
+        args=[document.id],
+        queue=TaskQueue.LONG,
+    )
     return DocumentUploadDTO(
         document=document,
         upload_url=upload_url,
@@ -405,11 +415,16 @@ async def add_document(
         )
         await uow.commit()
         logger.info('Document created: project_id=%s', project_id)
-        return document
     except Exception:
         logger.exception('Document creation failed: project_id=%s', project_id)
         await storage.delete(key)
         raise
+    send_task(
+        'agents.embeddings.document',
+        args=[document.id],
+        queue=TaskQueue.LONG,
+    )
+    return document
 
 
 async def update_document(
@@ -510,6 +525,12 @@ async def update_document(
         raise
     if new_key is not None and document.file is not None:
         await storage.delete(document.file)
+    if 'name' in changes or 'description' in changes:
+        send_task(
+            'agents.embeddings.document',
+            args=[document_id],
+            queue=TaskQueue.LONG,
+        )
     return updated
 
 
@@ -542,6 +563,11 @@ async def delete_document(
     )
     await uow.document_repository.delete_document(document_id)
     await uow.commit()
+    send_task(
+        'agents.embeddings.delete_document',
+        args=[document_id],
+        queue=TaskQueue.LONG,
+    )
     if document.file is not None:
         await storage.delete(document.file)
     logger.info(
@@ -590,6 +616,11 @@ async def review_document(
         },
     )
     await uow.commit()
+    send_task(
+        'agents.embeddings.document',
+        args=[document_id],
+        queue=TaskQueue.LONG,
+    )
     logger.info(
         'Document review completed: project_id=%s document_id=%s accepted=%s',
         project_id,

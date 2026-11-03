@@ -31,7 +31,7 @@ def test_celery_app_registers_short_and_long_queues_with_short_default():
 def test_celery_imports_upload_tasks_and_schedules_expiration_on_long_queue():
     schedule = celery_app.conf.beat_schedule['expire-stale-project-uploads']
 
-    assert celery_app.conf.imports == ('project.tasks',)
+    assert celery_app.conf.imports == ('agents.tasks', 'project.tasks')
     assert schedule['task'] == 'project.uploads.expire_stale'
     assert schedule['schedule'].total_seconds() == 60
     assert schedule['options'] == {'queue': 'long_tasks'}

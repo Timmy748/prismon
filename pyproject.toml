@@ -25,6 +25,9 @@ dependencies = [
   "opentelemetry-instrumentation-logging>=0.60b0",
   "aioboto3>=15.5.0",
   "celery[redis]>=5.5.3",
+  "httpx>=0.28.1",
+  "numpy>=2.5.4",
+  "pgvector>=0.4.2",
 ]
 
 [tool.ruff]
