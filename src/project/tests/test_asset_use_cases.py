@@ -1,6 +1,7 @@
 # ruff: noqa: F811
 from dataclasses import replace
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -82,6 +83,27 @@ async def test_get_asset_file_url_returns_signed_url_after_read_authorization(
         download_filename=f'asset-{asset.id}',
         disposition='inline',
         content_type='image/svg+xml',
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_asset_file_url_uses_internal_storage_endpoint(
+    monkeypatch, asset_dependencies
+):
+    project_repo, member_repo, asset_repo, storage, asset = asset_dependencies
+    uow = make_unit_of_work(project_repo, member_repo, asset_repo=asset_repo)
+    monkeypatch.setattr(
+        'project.use_cases.assets.get_settings',
+        lambda: SimpleNamespace(RUSTFS_ENDPOINT_URL='http://rustfs:9000'),
+    )
+
+    await get_asset_file_url(uow, storage, 8, 12, asset.id, internal=True)
+
+    storage.get_presigned_url.assert_awaited_once_with(
+        asset.file,
+        download_filename=f'asset-{asset.id}',
+        disposition='inline',
+        endpoint_url='http://rustfs:9000',
     )
 
 

@@ -24,7 +24,9 @@ from project.exceptions import (
     InvalidDocumentStateException,
     ProjectNotFoundException,
 )
-from project.permissions import ProjectPermission, has_permission
+from project.permissions.actions import DocumentAction
+from project.permissions.dispatcher import verify_resource_permission
+from project.permissions.dtos import DocumentPermissionDTO
 from project.storage import IStorage
 from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.resource_events import (
@@ -56,13 +58,15 @@ async def _authorize(
     uow: IProjectUnitOfWork,
     project_id: int,
     user_id: int,
-    permission: ProjectPermission,
+    permission: DocumentAction,
 ):
     if await uow.project_repository.get_project(project_id) is None:
         raise ProjectNotFoundException(project_id)
     member = await _get_member(uow, project_id, user_id)
-    if not has_permission(member.role, permission):
-        raise InsufficientProjectPermissionException(permission)
+    if not verify_resource_permission(
+        member, DocumentPermissionDTO(project_id=project_id), permission
+    ):
+        raise InsufficientProjectPermissionException(permission.value)
     return member
 
 
@@ -74,10 +78,14 @@ def _new_upload_key(project_id: int) -> str:
     return f'uploads/projects/{project_id}/documents/{token_hex(16)}'
 
 
-def _document_status_after_upload(member) -> DocumentStatus:
+def _document_status_after_upload(member, project_id: int) -> DocumentStatus:
     return (
         DocumentStatus.PUBLISHED
-        if has_permission(member.role, ProjectPermission.DOCUMENT_APPROVE)
+        if verify_resource_permission(
+            member,
+            DocumentPermissionDTO(project_id=project_id),
+            DocumentAction.APPROVE,
+        )
         else DocumentStatus.PENDING
     )
 
@@ -95,7 +103,7 @@ async def get_documents(
         uow,
         project_id,
         user_id,
-        ProjectPermission.DOCUMENT_READ,
+        DocumentAction.READ,
     )
     del storage  # Listing returns metadata; file contents remain in storage.
     page = await uow.document_repository.get_documents(
@@ -117,7 +125,7 @@ async def _get_document_for_read(
         uow,
         project_id,
         user_id,
-        ProjectPermission.DOCUMENT_READ,
+        DocumentAction.READ,
     )
     document = await uow.document_repository.get_document(document_id)
     if document is None or document.project_id != project_id:
@@ -188,7 +196,7 @@ async def start_document_upload(
         uow,
         project_id,
         user_id,
-        ProjectPermission.DOCUMENT_CREATE,
+        DocumentAction.CREATE,
     )
     content_type = data.content_type or 'application/octet-stream'
     settings = get_settings()
@@ -202,7 +210,7 @@ async def start_document_upload(
         content_type,
         settings.RUSTFS_PRESIGNED_URL_TTL_SECONDS,
     )
-    target_status = _document_status_after_upload(member)
+    target_status = _document_status_after_upload(member, project_id)
     document = await uow.document_repository.create_document(
         project_id=project_id,
         created_by_member_id=member.id,
@@ -272,7 +280,7 @@ async def start_document_replacement(
         uow,
         project_id,
         user_id,
-        ProjectPermission.DOCUMENT_UPDATE,
+        DocumentAction.UPDATE,
     )
     document = await uow.document_repository.get_document(document_id)
     if document is None or document.project_id != project_id:
@@ -280,7 +288,7 @@ async def start_document_replacement(
     if document.status is DocumentStatus.UPLOADING:
         raise InvalidDocumentStateException(document.id, document.status)
     target_status = (
-        _document_status_after_upload(member)
+        _document_status_after_upload(member, project_id)
         if document.status is DocumentStatus.FAILED
         else document.status
     )
@@ -379,11 +387,11 @@ async def add_document(
         uow,
         project_id,
         user_id,
-        ProjectPermission.DOCUMENT_CREATE,
+        DocumentAction.CREATE,
     )
     key = _new_storage_key(project_id)
     await storage.save(key, content, content_type)
-    status = _document_status_after_upload(member)
+    status = _document_status_after_upload(member, project_id)
     try:
         document = await uow.document_repository.create_document(
             project_id=project_id,
@@ -441,7 +449,7 @@ async def update_document(
         uow,
         project_id,
         user_id,
-        ProjectPermission.DOCUMENT_UPDATE,
+        DocumentAction.UPDATE,
     )
     document = await uow.document_repository.get_document(document_id)
     if document is None or document.project_id != project_id:
@@ -545,7 +553,7 @@ async def delete_document(
         uow,
         project_id,
         user_id,
-        ProjectPermission.DOCUMENT_DELETE,
+        DocumentAction.DELETE,
     )
     document = await uow.document_repository.get_document(document_id)
     if document is None or document.project_id != project_id:
@@ -588,7 +596,7 @@ async def review_document(
         uow,
         project_id,
         user_id,
-        ProjectPermission.DOCUMENT_APPROVE,
+        DocumentAction.APPROVE,
     )
     document = await uow.document_repository.get_document(document_id)
     if document is None or document.project_id != project_id:
@@ -641,7 +649,7 @@ async def get_document_events(
         uow,
         project_id,
         user_id,
-        ProjectPermission.DOCUMENT_READ,
+        DocumentAction.READ,
     )
     return await get_resource_events(
         uow,

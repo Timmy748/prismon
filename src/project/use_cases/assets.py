@@ -24,7 +24,9 @@ from project.exceptions import (
     InvalidAssetStateException,
     ProjectNotFoundException,
 )
-from project.permissions import ProjectPermission, has_permission
+from project.permissions.actions import AssetAction
+from project.permissions.dispatcher import verify_resource_permission
+from project.permissions.dtos import AssetPermissionDTO
 from project.storage import IStorage
 from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.resource_events import (
@@ -58,20 +60,25 @@ async def _authorize_asset_access(
     uow: IProjectUnitOfWork,
     project_id: int,
     user_id: int,
-    permission: ProjectPermission,
+    permission: AssetAction,
 ):
     if await uow.project_repository.get_project(project_id) is None:
         raise ProjectNotFoundException(project_id)
     member = await _get_active_member(uow, project_id, user_id)
-    if not has_permission(member.role, permission):
-        raise InsufficientProjectPermissionException(permission)
+    resource = AssetPermissionDTO(project_id=project_id)
+    if not verify_resource_permission(member, resource, permission):
+        raise InsufficientProjectPermissionException(permission.value)
     return member
 
 
-def _asset_upload_status(member) -> AssetStatus:
+def _asset_upload_status(member, project_id: int) -> AssetStatus:
     return (
         AssetStatus.ACTIVE
-        if has_permission(member.role, ProjectPermission.ASSET_APPROVE)
+        if verify_resource_permission(
+            member,
+            AssetPermissionDTO(project_id=project_id),
+            AssetAction.APPROVE,
+        )
         else AssetStatus.PENDING
     )
 
@@ -84,7 +91,7 @@ async def start_asset_upload(
     data: StartAssetUploadDTO,
 ) -> AssetUploadDTO:
     member = await _authorize_asset_access(
-        uow, project_id, user_id, ProjectPermission.ASSET_CREATE
+        uow, project_id, user_id, AssetAction.CREATE
     )
     now = datetime.now(UTC)
     ttl = get_settings().RUSTFS_PRESIGNED_URL_TTL_SECONDS
@@ -95,7 +102,7 @@ async def start_asset_upload(
     upload_url = await storage.generate_presigned_put_url(
         key, data.content_type, ttl
     )
-    target_status = _asset_upload_status(member)
+    target_status = _asset_upload_status(member, project_id)
     asset = await uow.asset_repository.create_asset(
         project_id=project_id,
         file=None,
@@ -170,7 +177,7 @@ async def start_asset_replacement(
     original_filename: str | None = None,
 ) -> AssetUploadDTO:
     member = await _authorize_asset_access(
-        uow, project_id, user_id, ProjectPermission.ASSET_UPDATE
+        uow, project_id, user_id, AssetAction.UPDATE
     )
     asset = await uow.asset_repository.get_asset(asset_id)
     if asset is None or asset.project_id != project_id:
@@ -179,7 +186,7 @@ async def start_asset_replacement(
         raise InvalidAssetStateException(asset_id, asset.status)
 
     target_status = (
-        _asset_upload_status(member)
+        _asset_upload_status(member, project_id)
         if asset.status is AssetStatus.FAILED
         else asset.status
     )
@@ -247,7 +254,7 @@ async def get_assets(
         uow,
         project_id,
         user_id,
-        ProjectPermission.ASSET_READ,
+        AssetAction.READ,
     )
     del storage  # Listing returns metadata; file contents remain in storage.
     page = await uow.asset_repository.get_assets(
@@ -269,7 +276,7 @@ async def _get_asset_for_read(
         uow,
         project_id,
         user_id,
-        ProjectPermission.ASSET_READ,
+        AssetAction.READ,
     )
     asset = await uow.asset_repository.get_asset(asset_id)
     if asset is None or asset.project_id != project_id:
@@ -338,11 +345,11 @@ async def add_asset(
         uow,
         project_id,
         user_id,
-        ProjectPermission.ASSET_CREATE,
+        AssetAction.CREATE,
     )
     key = f'projects/{project_id}/assets/{token_hex(16)}'
     await storage.save(key, content, content_type)
-    status = _asset_upload_status(member)
+    status = _asset_upload_status(member, project_id)
     try:
         asset = await uow.asset_repository.create_asset(
             project_id=project_id,
@@ -395,7 +402,7 @@ async def update_asset(
         uow,
         project_id,
         user_id,
-        ProjectPermission.ASSET_UPDATE,
+        AssetAction.UPDATE,
     )
     asset = await uow.asset_repository.get_asset(asset_id)
     if asset is None or asset.project_id != project_id:
@@ -498,7 +505,7 @@ async def delete_asset(
         uow,
         project_id,
         user_id,
-        ProjectPermission.ASSET_UPDATE,
+        AssetAction.UPDATE,
     )
     asset = await uow.asset_repository.get_asset(asset_id)
     if asset is None or asset.project_id != project_id:
@@ -539,7 +546,7 @@ async def review_asset(
         uow,
         project_id,
         user_id,
-        ProjectPermission.ASSET_APPROVE,
+        AssetAction.APPROVE,
     )
     asset = await uow.asset_repository.get_asset(asset_id)
     if asset is None or asset.project_id != project_id:
@@ -589,9 +596,7 @@ async def get_asset_events(
     asset_id: int,
     pagination: PaginationDTO = PaginationDTO(),
 ) -> CursorPage[ResourceEventDTO]:
-    await _authorize_asset_access(
-        uow, project_id, user_id, ProjectPermission.ASSET_READ
-    )
+    await _authorize_asset_access(uow, project_id, user_id, AssetAction.READ)
     return await get_resource_events(
         uow, project_id, 'asset', asset_id, pagination
     )

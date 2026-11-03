@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from agents.dtos.search import HybridSearchCandidate
+from agents.use_cases import rag_resources
 from agents.use_cases.rag_resources import load_rag_resources
 
 PROJECT_ID = 7
@@ -158,3 +159,57 @@ async def test_load_rag_resources_keeps_other_resources_on_download_failure():
 
     assert loaded[0].text == 'available text'
     assert loaded[1].error == 'http_status_403'
+
+
+@pytest.mark.asyncio
+async def test_load_rag_resources_rejects_content_over_size_limit(monkeypatch):
+    monkeypatch.setattr(rag_resources, 'DEFAULT_MAX_RESOURCE_BYTES', 3)
+
+    async def handler(request):
+        del request
+        return httpx.Response(
+            200, headers={'content-type': 'text/plain'}, content=b'four'
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as client:
+        loaded = await load_rag_resources(
+            [HybridSearchCandidate('document', 1, 1, 0.1)],
+            AsyncMock(
+                get_document_file_url=AsyncMock(return_value='https://signed/1')
+            ),
+            PROJECT_ID,
+            USER_ID,
+            client=client,
+        )
+
+    assert loaded[0].text is None
+    assert loaded[0].error == 'resource_too_large'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('exception', 'expected_error'),
+    [
+        (httpx.ConnectError('connection refused'), 'resource_load_failed'),
+        (
+            RuntimeError('authorization client failed'),
+            'resource_access_denied_or_unavailable',
+        ),
+    ],
+)
+async def test_load_rag_resources_translates_download_exceptions(
+    exception, expected_error
+):
+    project_client = AsyncMock()
+    project_client.get_document_file_url.side_effect = exception
+
+    loaded = await load_rag_resources(
+        [HybridSearchCandidate('document', 1, 1, 0.1)],
+        project_client,
+        PROJECT_ID,
+        USER_ID,
+    )
+
+    assert loaded[0].error == expected_error

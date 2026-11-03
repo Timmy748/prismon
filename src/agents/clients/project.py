@@ -3,15 +3,17 @@
 from collections.abc import Callable
 from typing import Protocol
 
+from agents.actions import ChatAction
 from agents.dtos.project_resource import EmbeddingSourceDTO
 from agents.exceptions import ApiKeyNotFoundException
 from infra.logs import get_logger
 from project.dtos.page import PaginationDTO
-from project.entities.member import MemberRole, MemberStatus
+from project.entities.member import MemberStatus
 from project.exceptions import (
     ApiKeyNotFoundException as ProjectApiKeyNotFoundException,
 )
-from project.permissions import ProjectPermission
+from project.permissions.actions import ChatAction as ProjectChatAction
+from project.permissions.dtos import ProjectPermissionDTO
 from project.public_api import ProjectPublicAPI
 from project.storage import create_storage
 from project.unit_of_work import (
@@ -49,8 +51,8 @@ class IProjectClient(Protocol):
         internal: bool = False,
     ) -> str: ...
 
-    async def has_permission(
-        self, project_id: int, user_id: int, permission: ProjectPermission
+    async def verify_resource_permission(
+        self, project_id: int, user_id: int, action: ChatAction
     ) -> bool: ...
 
     async def get_api_key(
@@ -127,8 +129,8 @@ class ProjectClient:
             **({'internal': True} if internal else {}),
         )
 
-    async def has_permission(
-        self, project_id: int, user_id: int, permission: ProjectPermission
+    async def verify_resource_permission(
+        self, project_id: int, user_id: int, action: ChatAction
     ) -> bool:
         async with self._unit_of_work_factory() as uow:
             members = await uow.member_repository.get_members(
@@ -143,18 +145,20 @@ class ProjectClient:
                 'permission=%s',
                 project_id,
                 user_id,
-                getattr(permission, 'value', permission),
+                action.value,
             )
             return False
-        allowed = self._project_api.has_permission(
-            MemberRole(members.items[0].role), permission
+        allowed = self._project_api.verify_resource_permission(
+            members.items[0],
+            ProjectPermissionDTO(project_id),
+            ProjectChatAction(action.value),
         )
         logger.debug(
             'Project permission checked: project_id=%d user_id=%d '
             'permission=%s allowed=%s',
             project_id,
             user_id,
-            getattr(permission, 'value', permission),
+            action.value,
             allowed,
         )
         return allowed

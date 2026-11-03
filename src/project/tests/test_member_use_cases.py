@@ -1,8 +1,15 @@
+from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from project.dtos.member import ChangeRoleMemberDTO, ResumeInviteMemberDTO
+import project.use_cases.member as member_use_cases
+from project.dtos.member import (
+    ChangeRoleMemberDTO,
+    MemberDTO,
+    ResumeInviteMemberDTO,
+)
 from project.entities.member import MemberRole, MemberStatus
 from project.exceptions import (
     InsufficientProjectPermissionException,
@@ -46,6 +53,36 @@ async def test_get_members_missing_project_is_hidden(
 ):
     with pytest.raises(ProjectNotFoundException):
         await get_members(unit_of_work, 404, 1)
+
+
+@pytest.mark.asyncio
+async def test_get_members_raises_when_permission_dispatch_denies(
+    monkeypatch,
+):
+    now = datetime.now(UTC)
+    project = SimpleNamespace(id=5)
+    member = MemberDTO(
+        8,
+        project.id,
+        MemberRole.OWNER,
+        MemberStatus.ACTIVE,
+        1,
+        now,
+        now,
+    )
+    monkeypatch.setattr(
+        member_use_cases,
+        '_require_project_member',
+        AsyncMock(return_value=(project, member)),
+    )
+    monkeypatch.setattr(
+        member_use_cases,
+        'verify_resource_permission',
+        lambda *args, **kwargs: False,
+    )
+
+    with pytest.raises(InsufficientProjectPermissionException):
+        await get_members(SimpleNamespace(), project.id, 1)
 
 
 @pytest.mark.asyncio
@@ -239,6 +276,42 @@ async def test_accept_invitation_raises_if_update_returns_none(
             project.id,
             2,
             ResumeInviteMemberDTO(True),
+        )
+
+
+@pytest.mark.asyncio
+async def test_respond_to_invitation_raises_when_permission_dispatch_denies(
+    monkeypatch,
+):
+    now = datetime.now(UTC)
+    project = SimpleNamespace(id=5)
+    invitation = MemberDTO(
+        8,
+        project.id,
+        MemberRole.MEMBER,
+        MemberStatus.PENDING,
+        2,
+        now,
+        now,
+    )
+    member_repo = SimpleNamespace(
+        get_members=AsyncMock(return_value=SimpleNamespace(items=[invitation]))
+    )
+    uow = SimpleNamespace(
+        project_repository=SimpleNamespace(
+            get_project=AsyncMock(return_value=project)
+        ),
+        member_repository=member_repo,
+    )
+    monkeypatch.setattr(
+        member_use_cases,
+        'verify_resource_permission',
+        lambda *args, **kwargs: False,
+    )
+
+    with pytest.raises(InvalidInvitationStateException):
+        await respond_to_invitation(
+            uow, project.id, 2, ResumeInviteMemberDTO(True)
         )
 
 

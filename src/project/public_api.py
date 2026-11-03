@@ -3,11 +3,14 @@ from collections.abc import Callable
 from infra.logs import get_logger
 from project.dtos.asset import AssetDTO
 from project.dtos.document import DocumentDTO
+from project.dtos.member import MemberDTO
 from project.dtos.page import CursorPage, PaginationDTO
 from project.entities.asset import AssetStatus
 from project.entities.document import DocumentStatus
-from project.entities.member import MemberRole
-from project.permissions import ProjectPermission, has_permission
+from project.permissions.authorization import ResourceActions
+from project.permissions.dispatcher import (
+    verify_resource_permission as dispatch_permission,
+)
 from project.security.api_key import (
     IApiKeyEncryption,
     create_api_key_encryption,
@@ -39,10 +42,14 @@ class ProjectPublicAPI:
         self.unit_of_work_factory = unit_of_work_factory
         self.encryption_factory = encryption_factory
 
-    def has_permission(
-        self, role: MemberRole, permission: ProjectPermission
+    def verify_resource_permission(
+        self,
+        member: MemberDTO,
+        resource: object,
+        action: ResourceActions,
+        **context: object,
     ) -> bool:
-        return has_permission(role=role, permission=permission)
+        return dispatch_permission(member, resource, action, **context)
 
     async def get_document_embedding_source(
         self, document_id: int

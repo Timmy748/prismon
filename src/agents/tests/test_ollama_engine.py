@@ -19,6 +19,7 @@ from agents.llm_engine.base import (
     ToolCall,
     ToolCallDelta,
 )
+from agents.llm_engine.langchain_base import LangChainEngine
 from agents.llm_engine.ollama import OllamaEngine
 
 EXPECTED_OUTPUT_TOKENS = 20
@@ -237,6 +238,33 @@ def test_tool_call_deltas_skips_entries_without_integer_index():
     deltas = OllamaEngine._tool_call_deltas(chunk)
 
     assert deltas == []
+
+
+@pytest.mark.parametrize(
+    ('payload', 'expected_exception', 'message'),
+    [
+        ({'images': 'not-a-list'}, TypeError, 'must be a list'),
+        ({'images': [object()]}, TypeError, 'must be a mapping'),
+        (
+            {'images': [{'media_type': 'text/plain', 'base64': 'data'}]},
+            ValueError,
+            'is invalid',
+        ),
+    ],
+)
+def test_langchain_image_payload_rejects_invalid_values(
+    payload, expected_exception, message
+):
+    user_message = SimpleNamespace(text='question', payload=payload)
+
+    with pytest.raises(expected_exception, match=message):
+        LangChainEngine._message_content(user_message)
+
+
+def test_langchain_image_payload_ignores_empty_image_list():
+    user_message = SimpleNamespace(text='question', payload={'images': []})
+
+    assert LangChainEngine._message_content(user_message) == 'question'
 
 
 @pytest.mark.asyncio

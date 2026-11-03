@@ -10,6 +10,7 @@ from fastapi import HTTPException, Request
 from pydantic import ValidationError
 
 import agents.routes.chats as chat_routes
+from agents.actions import ChatAction
 from agents.dtos.chat import ChatDTO
 from agents.dtos.message import MessageDTO
 from agents.dtos.page import CursorPage, PaginationDTO
@@ -24,7 +25,6 @@ from agents.routes.chats import create_chat_routes
 from agents.schemas.chat import UpdateChatTitleSchema
 from agents.schemas.message import CreateMessageSchema
 from agents.utils.pagination import encode_cursor
-from project.permissions import ProjectPermission
 
 CHAT_ID = 3
 PROJECT_ID = 7
@@ -243,7 +243,7 @@ async def test_post_message_to_existing_chat_streams_tokens_and_saved_message(
         sender_type=SenderType.ASSISTANT,
         text='answer',
     )
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -298,7 +298,7 @@ async def test_post_message_without_chat_streams_created_chat_event(
         sender_type=SenderType.ASSISTANT,
         text='answer',
     )
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -339,7 +339,7 @@ async def test_post_message_streams_generation_error_as_sse(
         [], PaginationDTO(limit=1)
     )
     message_repository.create_human_message.return_value = _message()
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -367,7 +367,7 @@ async def test_post_message_stream_converts_chat_dto_event(
     monkeypatch,
 ):
     chat_repository.get_chat.return_value = _chat()
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -423,7 +423,7 @@ async def test_post_message_stream_converts_iteration_exception_to_sse(
     expected,
 ):
     chat_repository.get_chat.return_value = _chat()
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -461,7 +461,7 @@ async def test_list_chat_messages_endpoint_returns_page_directly(
     message_repository.get_messages_by_chat.return_value = CursorPage(
         [_message()], PaginationDTO(limit=1)
     )
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -488,7 +488,7 @@ async def test_patch_chat_endpoint_returns_updated_chat_directly(
 ):
     chat_repository.get_chat.return_value = _chat()
     chat_repository.update_chat_title.return_value = _chat(title='Updated')
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -512,7 +512,7 @@ async def test_delete_chat_endpoint_returns_no_content_directly(
     project_client,
 ):
     chat_repository.get_chat.return_value = _chat()
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -536,7 +536,7 @@ async def test_list_project_chats_endpoint_returns_page_directly(
     chat_repository.get_chats_by_project.return_value = CursorPage(
         [_chat()], PaginationDTO(limit=1)
     )
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -759,7 +759,7 @@ async def test_post_message_maps_permission_error(
     project_client,
 ):
     chat_repository.get_chat.return_value = _chat()
-    project_client.has_permission.return_value = False
+    project_client.verify_resource_permission.return_value = False
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -776,8 +776,7 @@ async def test_post_message_maps_permission_error(
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert json.loads(response.body) == {
         'detail': (
-            'Missing project permission: '
-            f'{ProjectPermission.CHAT_SEND_MESSAGE.value}'
+            f'Missing project permission: {ChatAction.SEND_MESSAGE.value}'
         )
     }
 
@@ -805,7 +804,7 @@ async def test_post_message_maps_missing_api_key_to_not_found(
     project_client,
 ):
     chat_repository.get_chat.return_value = _chat()
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     project_client.get_api_key.side_effect = ApiKeyNotFoundException(123)
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
@@ -834,7 +833,7 @@ async def test_patch_chat_returns_updated_chat(
 ):
     chat_repository.get_chat.return_value = _chat()
     chat_repository.update_chat_title.return_value = _chat(title='Updated')
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -882,7 +881,7 @@ async def test_patch_chat_maps_missing_permission(
     project_client,
 ):
     chat_repository.get_chat.return_value = _chat()
-    project_client.has_permission.return_value = False
+    project_client.verify_resource_permission.return_value = False
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -906,7 +905,7 @@ async def test_delete_chat_returns_no_content(
     project_client,
 ):
     chat_repository.get_chat.return_value = _chat()
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -958,7 +957,7 @@ async def test_list_project_chats_returns_page(
     chat_repository.get_chats_by_project.return_value = CursorPage(
         [_chat()], PaginationDTO(cursor=cursor, limit=4, more=False)
     )
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )
@@ -985,7 +984,7 @@ async def test_list_project_chats_maps_permission_error(
     identity_client,
     project_client,
 ):
-    project_client.has_permission.return_value = False
+    project_client.verify_resource_permission.return_value = False
     identity_client.get_current_user.return_value = UserDTO(
         11, 'ana', 'a@example.com'
     )

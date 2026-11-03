@@ -1,9 +1,16 @@
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from http import HTTPStatus
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+import project.routes.api_keys as api_key_routes
+from project.dtos.api_key_hint import ApiKeyHintDTO
 from project.entities.api_key import ApiKeyProvider
+from project.routes.api_keys import create_api_keys_router
+from project.schemas.api_key import CreateApiKeySchema
 from project.use_cases.api_key import (
     create_member_api_key,
     create_project_api_key,
@@ -261,3 +268,53 @@ async def test_delete_endpoint_directly_removes_key(
     )
     assert result is None
     assert await uow.api_key_repository.get_api_key(key.id) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('path', 'use_case_name'),
+    [
+        ('/projects/{project_id}/members/me/api-keys', 'create_member_api_key'),
+        ('/projects/{project_id}/api-keys', 'create_project_api_key'),
+    ],
+)
+async def test_create_endpoints_log_and_return_created_hint_without_db(
+    monkeypatch, path, use_case_name
+):
+    uow = SimpleNamespace()
+
+    @asynccontextmanager
+    async def unit_of_work_factory():
+        yield uow
+
+    user_client = SimpleNamespace(
+        get_current_user=AsyncMock(return_value=SimpleNamespace(id=7))
+    )
+
+    def encryption_factory():
+        return object()
+
+    hint = ApiKeyHintDTO(
+        42, ApiKeyProvider.OPENROUTER, '****cret', datetime.now(UTC)
+    )
+    use_case = AsyncMock(return_value=hint)
+    monkeypatch.setattr(api_key_routes, use_case_name, use_case)
+    router = create_api_keys_router(
+        unit_of_work_factory,
+        lambda: user_client,
+        encryption_factory,
+    )
+    endpoint = next(
+        route.endpoint
+        for route in router.routes
+        if route.path == path and 'POST' in route.methods
+    )
+
+    result = await endpoint(
+        SimpleNamespace(cookies={'jwt': 'session'}),
+        11,
+        CreateApiKeySchema(provider='openrouter', api_key='my-secret'),
+    )
+
+    assert result is hint
+    use_case.assert_awaited_once()

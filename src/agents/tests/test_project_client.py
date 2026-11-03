@@ -3,12 +3,15 @@ from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 
+from agents.actions import ChatAction
 from agents.clients import project as project_client_module
 from agents.clients.project import ProjectClient, create_project_client
 from agents.exceptions import ApiKeyNotFoundException
 from project.exceptions import (
     ApiKeyNotFoundException as ProjectApiKeyNotFoundException,
 )
+from project.permissions.actions import ChatAction as ProjectChatAction
+from project.permissions.dtos import ProjectPermissionDTO
 
 
 def _uow(member_repository):
@@ -19,7 +22,7 @@ def _uow(member_repository):
 
 
 @pytest.mark.asyncio
-async def test_has_permission_returns_false_without_active_member():
+async def test_verify_resource_permission_returns_false_without_active_member():
     member_repository = Mock()
     member_repository.get_members = AsyncMock(
         return_value=SimpleNamespace(
@@ -32,10 +35,10 @@ async def test_has_permission_returns_false_without_active_member():
     project_api = Mock()
     client = ProjectClient(project_api, unit_of_work_factory)
 
-    result = await client.has_permission(
+    result = await client.verify_resource_permission(
         project_id=3,
         user_id=9,
-        permission='chat:read',
+        action=ChatAction.READ,
     )
 
     assert result is False
@@ -43,7 +46,7 @@ async def test_has_permission_returns_false_without_active_member():
 
 
 @pytest.mark.asyncio
-async def test_has_permission_queries_only_active_member_for_user():
+async def test_verify_resource_permission_queries_only_active_member_for_user():
     member = SimpleNamespace(
         id=1,
         project_id=3,
@@ -61,7 +64,7 @@ async def test_has_permission_queries_only_active_member_for_user():
     unit_of_work = _uow(member_repository)
     client = ProjectClient(Mock(), Mock(return_value=unit_of_work))
 
-    await client.has_permission(3, 9, 'chat:read')
+    await client.verify_resource_permission(3, 9, ChatAction.READ)
 
     call_args = member_repository.get_members.await_args
     pagination = call_args.kwargs['pagination']
@@ -76,7 +79,7 @@ async def test_has_permission_queries_only_active_member_for_user():
 
 
 @pytest.mark.asyncio
-async def test_has_permission_delegates_member_role_and_requested_permission():
+async def test_permission_dispatches_member_resource_and_action():
     member = SimpleNamespace(
         id=1,
         project_id=3,
@@ -92,20 +95,21 @@ async def test_has_permission_delegates_member_role_and_requested_permission():
         )
     )
     project_api = Mock()
-    project_api.has_permission.return_value = True
+    project_api.verify_resource_permission.return_value = True
     unit_of_work = _uow(member_repository)
     client = ProjectClient(project_api, Mock(return_value=unit_of_work))
 
-    await client.has_permission(3, 9, 'workflow:use')
+    await client.verify_resource_permission(3, 9, ChatAction.READ)
 
-    project_api.has_permission.assert_called_once_with(
-        'collaborator',
-        'workflow:use',
+    project_api.verify_resource_permission.assert_called_once_with(
+        member,
+        ProjectPermissionDTO(3),
+        ProjectChatAction.READ,
     )
 
 
 @pytest.mark.asyncio
-async def test_has_permission_returns_project_permission_result():
+async def test_verify_resource_permission_returns_project_permission_result():
     member = SimpleNamespace(
         id=1,
         project_id=3,
@@ -121,11 +125,11 @@ async def test_has_permission_returns_project_permission_result():
         )
     )
     project_api = Mock()
-    project_api.has_permission.return_value = False
+    project_api.verify_resource_permission.return_value = False
     unit_of_work = _uow(member_repository)
     client = ProjectClient(project_api, Mock(return_value=unit_of_work))
 
-    result = await client.has_permission(3, 9, 'chat:create')
+    result = await client.verify_resource_permission(3, 9, ChatAction.CREATE)
 
     assert result is False
 
@@ -204,6 +208,50 @@ async def test_embedding_source_preserves_project_and_status_metadata():
     assert source.project_id == project_id
     assert source.status == 'published'
     project_api.get_document_embedding_source.assert_awaited_once_with(123)
+
+
+@pytest.mark.asyncio
+async def test_asset_embedding_source_preserves_metadata():
+    asset = SimpleNamespace(
+        name='Box',
+        description='Front view',
+        project_id=4,
+        status=SimpleNamespace(value='active'),
+    )
+    project_api = Mock()
+    project_api.get_asset_embedding_source = AsyncMock(return_value=asset)
+    client = ProjectClient(project_api)
+
+    source = await client.get_asset_embedding_source(456)
+
+    assert (
+        source.name,
+        source.description,
+        source.project_id,
+        source.status,
+    ) == ('Box', 'Front view', 4, 'active')
+    project_api.get_asset_embedding_source.assert_awaited_once_with(456)
+
+
+@pytest.mark.parametrize(
+    ('method_name', 'resource_id'),
+    [
+        ('get_document_embedding_source', 123),
+        ('get_asset_embedding_source', 456),
+    ],
+)
+@pytest.mark.asyncio
+async def test_embedding_source_returns_none_for_missing_resource(
+    method_name, resource_id
+):
+    project_api = Mock()
+    setattr(project_api, method_name, AsyncMock(return_value=None))
+    client = ProjectClient(project_api)
+
+    result = await getattr(client, method_name)(resource_id)
+
+    assert result is None
+    getattr(project_api, method_name).assert_awaited_once_with(resource_id)
 
 
 @pytest.mark.asyncio

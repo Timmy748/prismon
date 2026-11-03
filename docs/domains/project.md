@@ -103,9 +103,10 @@ Recupera os documentos de um projeto.
 
 Recupera os assets de um projeto.
 
-### `has_permission`
+### `verify_resource_permission`
 
-Verifica se um usuário possui determinada permissão dentro de um projeto.
+Despacha a decisão para as políticas registradas para o tipo do DTO do recurso.
+Recebe o membro, o DTO de autorização do recurso, uma ação e contexto opcional.
 
 ## Rotas da API
 

@@ -8,6 +8,9 @@ from project.exceptions import (
     ApiKeyNotFoundException,
     InsufficientProjectPermissionException,
 )
+from project.permissions.actions import ApiKeyAction
+from project.permissions.dispatcher import verify_resource_permission
+from project.permissions.dtos import ApiKeyPermissionDTO
 from project.security.api_key import EncryptedApiKey, IApiKeyEncryption
 from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.project import _require_project_member
@@ -86,6 +89,14 @@ async def create_member_api_key(
         provider.value,
     )
     _, member = await _require_project_member(uow, project_id, user_id)
+    if not verify_resource_permission(
+        member,
+        ApiKeyPermissionDTO(None, member.id, None),
+        ApiKeyAction.MEMBER_CREATE,
+    ):
+        raise InsufficientProjectPermissionException(
+            ApiKeyAction.MEMBER_CREATE.value
+        )
     return await _create(uow, provider, api_key, encryptor, member_id=member.id)
 
 
@@ -103,8 +114,12 @@ async def create_project_api_key(
         user_id,
         provider.value,
     )
-    project, _ = await _require_project_member(uow, project_id, user_id)
-    if project.owner_id != user_id:
+    project, member = await _require_project_member(uow, project_id, user_id)
+    if not verify_resource_permission(
+        member,
+        ApiKeyPermissionDTO(project.id, None, project.owner_id),
+        ApiKeyAction.PROJECT_CREATE,
+    ):
         logger.warning(
             'Project API key creation denied: project_id=%s user_id=%s',
             project_id,
@@ -128,6 +143,14 @@ async def list_member_api_keys(
         user_id,
     )
     _, member = await _require_project_member(uow, project_id, user_id)
+    if not verify_resource_permission(
+        member,
+        ApiKeyPermissionDTO(None, member.id, None),
+        ApiKeyAction.MEMBER_LIST,
+    ):
+        raise InsufficientProjectPermissionException(
+            ApiKeyAction.MEMBER_LIST.value
+        )
     page = await uow.api_key_repository.list_member_api_keys(
         member.id, pagination
     )
@@ -154,7 +177,15 @@ async def list_project_api_keys(
         project_id,
         user_id,
     )
-    await _require_project_member(uow, project_id, user_id)
+    project, member = await _require_project_member(uow, project_id, user_id)
+    if not verify_resource_permission(
+        member,
+        ApiKeyPermissionDTO(project.id, None, project.owner_id),
+        ApiKeyAction.PROJECT_LIST,
+    ):
+        raise InsufficientProjectPermissionException(
+            ApiKeyAction.PROJECT_LIST.value
+        )
     page = await uow.api_key_repository.list_project_api_keys(
         project_id, pagination
     )
@@ -182,7 +213,7 @@ async def get_api_key(
         user_id,
         api_key_id,
     )
-    _, member = await _require_project_member(uow, project_id, user_id)
+    project, member = await _require_project_member(uow, project_id, user_id)
     key = await uow.api_key_repository.get_api_key(api_key_id)
     if key is None:
         logger.warning(
@@ -190,12 +221,14 @@ async def get_api_key(
             api_key_id,
         )
         raise ApiKeyNotFoundException(api_key_id)
-    owns_key = (
-        key.member_id == member.id and key.project_id is None
-        if key.member_id is not None
-        else key.project_id == project_id
+    permission_resource = ApiKeyPermissionDTO(
+        key.project_id,
+        key.member_id,
+        project.owner_id if key.project_id is not None else None,
     )
-    if not owns_key:
+    if not verify_resource_permission(
+        member, permission_resource, ApiKeyAction.READ
+    ):
         logger.warning(
             'Project API key lookup failed: '
             'api_key_id=%s reason=not_owned project_id=%s user_id=%s',
@@ -244,7 +277,14 @@ async def delete_api_key(
             user_id,
         )
         raise ApiKeyNotFoundException(api_key_id)
-    if key.project_id == project_id and project.owner_id != user_id:
+    permission_resource = ApiKeyPermissionDTO(
+        key.project_id,
+        key.member_id,
+        project.owner_id if key.project_id is not None else None,
+    )
+    if not verify_resource_permission(
+        member, permission_resource, ApiKeyAction.DELETE
+    ):
         logger.warning(
             'Project API key deletion denied: '
             'api_key_id=%s project_id=%s user_id=%s',
