@@ -8,49 +8,8 @@ from project.dtos.member import MemberDTO
 from project.dtos.page import CursorPage, PaginationDTO
 from project.entities.member import MemberRole, MemberStatus
 from project.exceptions import ProjectNotFoundException
-from project.permissions import ProjectPermission
-
-
-@pytest.mark.parametrize(
-    ('role', 'permissions'),
-    [
-        (MemberRole.OWNER, set(ProjectPermission)),
-        (MemberRole.DIRECTOR, set(ProjectPermission)),
-        (
-            MemberRole.MEMBER,
-            {
-                ProjectPermission.CHAT_READ,
-                ProjectPermission.CHAT_CREATE,
-                ProjectPermission.CHAT_DELETE,
-                ProjectPermission.CHAT_UPDATE,
-                ProjectPermission.CHAT_SEND_MESSAGE,
-                ProjectPermission.DOCUMENT_CREATE,
-                ProjectPermission.DOCUMENT_READ,
-                ProjectPermission.DOCUMENT_DELETE,
-                ProjectPermission.ASSET_CREATE,
-                ProjectPermission.ASSET_READ,
-                ProjectPermission.TAG_READ,
-            },
-        ),
-        (
-            MemberRole.COLLABORATOR,
-            {
-                ProjectPermission.WORKFLOW_USE,
-                ProjectPermission.CHAT_READ,
-                ProjectPermission.DOCUMENT_READ,
-                ProjectPermission.ASSET_READ,
-                ProjectPermission.TAG_READ,
-            },
-        ),
-    ],
-)
-def test_public_api_has_permission_returns_role_permission_membership(
-    role: MemberRole, permissions: set[ProjectPermission], public_api
-) -> None:
-    for permission in ProjectPermission:
-        assert public_api.has_permission(role, permission) == (
-            permission in permissions
-        )
+from project.permissions.actions import ProjectAction
+from project.permissions.dtos import ProjectPermissionDTO
 
 
 @pytest.mark.asyncio
@@ -189,3 +148,31 @@ async def test_public_api_get_api_key_wraps_use_case(
     )
     uow.__aenter__.assert_awaited_once()
     uow.__aexit__.assert_awaited_once()
+
+
+def test_public_api_dispatches_resource_permission(public_api):
+    now = datetime.now(timezone.utc)
+    owner = MemberDTO(
+        10, 20, MemberRole.OWNER, MemberStatus.ACTIVE, 1, now, now
+    )
+
+    assert (
+        public_api.verify_resource_permission(
+            owner, ProjectPermissionDTO(20), ProjectAction.UPDATE
+        )
+        is True
+    )
+
+
+@pytest.mark.asyncio
+async def test_public_api_reads_embedding_sources_from_repositories(
+    mock_document_repo, mock_asset_repo, public_api
+):
+    mock_document_repo.get_document.return_value = None
+    mock_asset_repo.get_asset.return_value = None
+
+    assert await public_api.get_document_embedding_source(12) is None
+    assert await public_api.get_asset_embedding_source(13) is None
+
+    mock_document_repo.get_document.assert_awaited_once_with(12)
+    mock_asset_repo.get_asset.assert_awaited_once_with(13)

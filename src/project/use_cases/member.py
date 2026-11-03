@@ -15,21 +15,13 @@ from project.exceptions import (
     MemberNotFoundException,
     ProjectNotFoundException,
 )
-from project.permissions import ProjectPermission, has_permission
+from project.permissions.actions import MemberAction, ProjectAction
+from project.permissions.dispatcher import verify_resource_permission
+from project.permissions.dtos import MemberPermissionDTO, ProjectPermissionDTO
 from project.unit_of_work import IProjectUnitOfWork
 from project.use_cases.project import _require_project_member
 
 logger = get_logger(__name__)
-
-
-def _require_permission(
-    role: MemberRole, permission: ProjectPermission
-) -> None:
-    if not has_permission(role, permission):
-        logger.warning(
-            'Member permission denied: permission=%s', permission.value
-        )
-        raise InsufficientProjectPermissionException(permission.value)
 
 
 async def get_members(
@@ -38,7 +30,15 @@ async def get_members(
     user_id: int,
     pagination: PaginationDTO = PaginationDTO(),
 ) -> CursorPage[MemberDTO]:
-    await _require_project_member(uow, project_id, user_id)
+    _, member = await _require_project_member(uow, project_id, user_id)
+    if not verify_resource_permission(
+        member,
+        ProjectPermissionDTO(project_id),
+        ProjectAction.MEMBER_LIST,
+    ):
+        raise InsufficientProjectPermissionException(
+            ProjectAction.MEMBER_LIST.value
+        )
     page = await uow.member_repository.get_members(project_id, pagination)
     logger.debug(
         'Project members loaded: project_id=%s count=%s',
@@ -55,7 +55,18 @@ async def invite_member(
     invited_user_id: int,
 ) -> MemberDTO:
     _, actor = await _require_project_member(uow, project_id, actor_user_id)
-    _require_permission(actor.role, ProjectPermission.MEMBER_INVITE)
+    if not verify_resource_permission(
+        actor,
+        ProjectPermissionDTO(project_id),
+        ProjectAction.MEMBER_INVITE,
+    ):
+        logger.warning(
+            'Member permission denied: permission=%s',
+            ProjectAction.MEMBER_INVITE.value,
+        )
+        raise InsufficientProjectPermissionException(
+            ProjectAction.MEMBER_INVITE.value
+        )
     existing = await uow.member_repository.get_members(
         project_id,
         PaginationDTO(limit=100),
@@ -85,7 +96,14 @@ async def change_member_role(
     data: ChangeRoleMemberDTO,
 ) -> MemberDTO:
     _, actor = await _require_project_member(uow, project_id, actor_user_id)
-    _require_permission(actor.role, ProjectPermission.MEMBER_CHANGE_ROLE)
+    if not verify_resource_permission(
+        actor,
+        ProjectPermissionDTO(project_id),
+        ProjectAction.MEMBER_CHANGE_ROLE,
+    ):
+        raise InsufficientProjectPermissionException(
+            ProjectAction.MEMBER_CHANGE_ROLE.value
+        )
     target = await uow.member_repository.get_member(member_id)
     if target is None or target.project_id != project_id:
         raise MemberNotFoundException(member_id)
@@ -122,6 +140,23 @@ async def respond_to_invitation(
     if not page.items:
         raise InvalidInvitationStateException(project_id, user_id)
     invitation = page.items[0]
+    member_action = (
+        MemberAction.ACCEPT_INVITATION
+        if data.accept
+        else MemberAction.DECLINE_INVITATION
+    )
+    if not verify_resource_permission(
+        invitation,
+        MemberPermissionDTO(
+            invitation.id,
+            invitation.project_id,
+            invitation.user_id,
+            invitation.role,
+            invitation.status,
+        ),
+        member_action,
+    ):
+        raise InvalidInvitationStateException(project_id, user_id)
     if not data.accept:
         await uow.member_repository.delete_member(invitation.id)
         await uow.commit()
@@ -152,7 +187,14 @@ async def remove_member(
     member_id: int,
 ) -> None:
     _, actor = await _require_project_member(uow, project_id, actor_user_id)
-    _require_permission(actor.role, ProjectPermission.MEMBER_REMOVE)
+    if not verify_resource_permission(
+        actor,
+        ProjectPermissionDTO(project_id),
+        ProjectAction.MEMBER_REMOVE,
+    ):
+        raise InsufficientProjectPermissionException(
+            ProjectAction.MEMBER_REMOVE.value
+        )
     target = await uow.member_repository.get_member(member_id)
     if target is None or target.project_id != project_id:
         raise MemberNotFoundException(member_id)

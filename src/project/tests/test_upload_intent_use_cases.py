@@ -709,6 +709,37 @@ async def test_expiration_fails_missing_upload_and_deletes_staging():
 
 
 @pytest.mark.asyncio
+async def test_expiration_records_event_when_document_is_no_longer_uploading():
+    uow = _uow()
+    intent = _intent(
+        asset_id=None,
+        document_id=DOCUMENT_ID,
+        object_key='uploads/projects/3/documents/incoming',
+        final_file_key='projects/3/documents/complete',
+        expires_at=NOW - timedelta(minutes=1),
+    )
+    uow.upload_intent_repository.get_expired_upload_intents.return_value = [
+        intent
+    ]
+    uow.upload_intent_repository.get_by_object_key_for_update.return_value = (
+        intent
+    )
+    uow.document_repository.get_document.return_value = _document(
+        status=DocumentStatus.PUBLISHED
+    )
+    storage = _storage(exists=False)
+
+    result = await expire_stale_upload_intents(uow, storage, NOW)
+
+    assert result == []
+    uow.document_repository.update_document.assert_not_awaited()
+    uow.resource_event_repository.create_event.assert_awaited_once()
+    uow.upload_intent_repository.delete_upload_intent.assert_awaited_once_with(
+        intent.id
+    )
+
+
+@pytest.mark.asyncio
 async def test_expire_stale_upload_intents_ignores_staging_cleanup_error():
     uow = _uow()
     intent = _intent(

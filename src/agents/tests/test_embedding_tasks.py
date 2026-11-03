@@ -51,6 +51,31 @@ def test_celery_sync_entrypoint_runs_async_context(
 
 
 @pytest.mark.parametrize(
+    ('task', 'resource_id', 'async_context_name'),
+    [
+        (
+            tasks.delete_document_embedding_task,
+            17,
+            '_delete_document_embedding',
+        ),
+        (tasks.delete_asset_embedding_task, 28, '_delete_asset_embedding'),
+    ],
+)
+def test_delete_task_sync_entrypoint_runs_async_context(
+    monkeypatch, task, resource_id, async_context_name
+):
+    async_runner = Mock(return_value=None)
+    monkeypatch.setattr(tasks.asyncio, 'run', async_runner)
+
+    result = task.run(resource_id)
+
+    assert result is None
+    coroutine = async_runner.call_args.args[0]
+    assert coroutine.cr_code.co_name == async_context_name
+    coroutine.close()
+
+
+@pytest.mark.parametrize(
     ('async_context_name', 'use_case_name', 'resource_id'),
     [
         ('_embed_document', 'embed_document', 17),

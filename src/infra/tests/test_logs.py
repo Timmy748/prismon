@@ -3,6 +3,8 @@ from threading import Event
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 from infra import logs
 
 
@@ -75,3 +77,17 @@ def test_setup_log_exports_each_record_once_and_is_idempotent(
                 root_logger.removeHandler(handler)
                 handler.close()
         root_logger.setLevel(initial_level)
+
+
+def test_setup_log_rejects_unsupported_level(monkeypatch):
+    monkeypatch.setattr(logs, '_configured', Event())
+    monkeypatch.setattr(
+        logs,
+        'get_settings',
+        lambda: SimpleNamespace(APP_LOG_LEVEL='verbose'),
+    )
+
+    with pytest.raises(
+        ValueError, match='Unsupported application log level: VERBOSE'
+    ):
+        logs.setup_log()

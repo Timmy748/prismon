@@ -1,9 +1,14 @@
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+import project.use_cases.api_key as api_key_use_cases
 from project.dtos.api_key import ApiKeyDTO
+from project.dtos.member import MemberDTO
 from project.dtos.page import PaginationDTO
+from project.dtos.project import ProjectDTO
 from project.entities.api_key import ApiKeyProvider
 from project.entities.member import MemberRole, MemberStatus
 from project.exceptions import (
@@ -260,3 +265,55 @@ async def test_list_use_case_preserves_page_metadata(
     assert page.pagination.limit == 1
     assert page.pagination.more is True
     assert page.pagination.cursor is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('operation', 'action'),
+    [
+        (create_member_api_key, 'create_member'),
+        (list_member_api_keys, 'list_member'),
+        (list_project_api_keys, 'list_project'),
+    ],
+)
+async def test_api_key_use_cases_raise_when_permission_dispatch_denies(
+    monkeypatch, key_encryptor, operation, action
+):
+    now = datetime.now(UTC)
+    project = ProjectDTO(5, 'project', 7, now, now)
+    member = MemberDTO(
+        8,
+        project.id,
+        MemberRole.MEMBER,
+        MemberStatus.ACTIVE,
+        1,
+        now,
+        now,
+    )
+    uow = SimpleNamespace()
+    monkeypatch.setattr(
+        api_key_use_cases,
+        '_require_project_member',
+        AsyncMock(return_value=(project, member)),
+    )
+    monkeypatch.setattr(
+        api_key_use_cases,
+        'verify_resource_permission',
+        lambda *args, **kwargs: False,
+    )
+
+    arguments = (
+        (
+            uow,
+            project.id,
+            1,
+            ApiKeyProvider.OPENROUTER,
+            'secret',
+            key_encryptor,
+        )
+        if action == 'create_member'
+        else (uow, project.id, 1)
+    )
+
+    with pytest.raises(InsufficientProjectPermissionException):
+        await operation(*arguments)

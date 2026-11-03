@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from dataclasses import asdict
 from typing import Any
 
+from agents.actions import ChatAction
 from agents.clients.project import IProjectClient
 from agents.dtos.chat import (
     MAX_CHAT_TITLE_LENGTH,
@@ -29,7 +30,6 @@ from agents.workflows.nodes.rag import RAGNode
 from agents.workflows.registry import workflow_registry_factory
 from infra.logs import get_logger
 from infra.settings import get_settings
-from project.permissions import ProjectPermission
 
 logger = get_logger(__name__)
 
@@ -38,16 +38,18 @@ async def _require_project_permission(
     project_client: IProjectClient,
     project_id: int,
     user_id: int,
-    permission: ProjectPermission,
+    action: ChatAction,
 ) -> None:
-    if not await project_client.has_permission(project_id, user_id, permission):
+    if not await project_client.verify_resource_permission(
+        project_id, user_id, action
+    ):
         logger.warning(
             'Project permission denied: project_id=%d user_id=%d permission=%s',
             project_id,
             user_id,
-            permission.value,
+            action.value,
         )
-        raise InsufficientProjectPermissionException(permission.value)
+        raise InsufficientProjectPermissionException(action.value)
 
 
 async def _get_chat(uow: IAgentsUnitOfWork, chat_id: int) -> ChatDTO:
@@ -77,7 +79,7 @@ async def create_chat(
         project_client,
         data.project_id,
         data.owner,
-        ProjectPermission.CHAT_CREATE,
+        ChatAction.CREATE,
     )
     chat = await uow.chat_repository.create_chat(
         title=data.title,
@@ -103,7 +105,7 @@ async def get_chat_messages(
         project_client,
         chat.project_id,
         user_id,
-        ProjectPermission.CHAT_READ,
+        ChatAction.READ,
     )
     page = await uow.message_repository.get_messages_by_chat(
         chat_id, pagination
@@ -130,7 +132,7 @@ async def send_message(
         project_client,
         chat.project_id,
         user_id,
-        ProjectPermission.CHAT_SEND_MESSAGE,
+        ChatAction.SEND_MESSAGE,
     )
     latest = await uow.message_repository.get_messages_by_chat(
         chat_id=chat_id,
@@ -229,7 +231,7 @@ async def update_chat_title(
         project_client,
         chat.project_id,
         user_id,
-        ProjectPermission.CHAT_UPDATE,
+        ChatAction.UPDATE,
     )
     updated_chat = await uow.chat_repository.update_chat_title(
         chat_id, data.title
@@ -250,7 +252,7 @@ async def delete_chat(
         project_client,
         chat.project_id,
         user_id,
-        ProjectPermission.CHAT_DELETE,
+        ChatAction.DELETE,
     )
     await uow.chat_repository.delete_chat(chat_id)
     await uow.commit()
@@ -268,7 +270,7 @@ async def get_project_chats(
         project_client,
         project_id,
         user_id,
-        ProjectPermission.CHAT_READ,
+        ChatAction.READ,
     )
     page = await uow.chat_repository.get_chats_by_project(
         project_id=project_id,

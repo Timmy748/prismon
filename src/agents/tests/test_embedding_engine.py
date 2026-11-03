@@ -191,3 +191,13 @@ async def test_embedding_closes_http_client_after_request(monkeypatch):
 
     assert len(clients) == 1
     assert clients[0].is_closed
+
+
+def test_embedding_rejects_non_object_ollama_response():
+    with pytest.raises(ValueError, match='must be a JSON object'):
+        OllamaEmbeddingEngine._parse_embedding([])
+
+
+def test_embedding_rejects_non_numeric_ollama_vector():
+    with pytest.raises(ValueError, match='numeric values'):
+        OllamaEmbeddingEngine._parse_embedding({'embeddings': [['invalid']]})

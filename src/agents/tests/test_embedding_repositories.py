@@ -211,3 +211,24 @@ async def test_hybrid_asset_search_returns_asset_candidates():
 
     assert candidates == expected
     uow.asset_embedding_repository.hybrid_search.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    ('repository_class', 'table_name'),
+    [
+        (DocumentEmbeddingRepository, 'document_embeddings'),
+        (AssetEmbeddingRepository, 'asset_embeddings'),
+    ],
+)
+@pytest.mark.asyncio
+async def test_embedding_repository_deletes_resource_embedding(
+    repository_class, table_name
+):
+    session = AsyncMock()
+    repository = repository_class(session)
+
+    await repository.delete_embedding(RESOURCE_ID)
+
+    session.execute.assert_awaited_once()
+    statement = str(session.execute.await_args.args[0])
+    assert f'DELETE FROM {table_name}' in statement

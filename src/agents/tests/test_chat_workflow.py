@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -138,6 +139,23 @@ def test_chat_workflow_builds_compiled_graph(chat_workflow_engine):
     workflow = ChatWorkflow(engine=chat_workflow_engine)
 
     assert isinstance(workflow.graph, CompiledStateGraph)
+
+
+@pytest.mark.asyncio
+async def test_chat_workflow_skips_rag_for_blank_latest_message():
+    rag_node = AsyncMock()
+    workflow = ChatWorkflow(engine=AsyncMock(), rag_node=rag_node)
+
+    result = await workflow._retrieve_context(
+        {
+            'messages': [SimpleNamespace(text='  \n')],
+            'project_id': 7,
+            'user_id': 9,
+        }
+    )
+
+    assert result == {'rag_result': None}
+    rag_node.run.assert_not_awaited()
     assert workflow.graph is workflow.graph
 
 

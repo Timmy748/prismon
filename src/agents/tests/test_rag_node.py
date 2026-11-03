@@ -234,3 +234,95 @@ async def test_rag_node_rejects_empty_question():
 
     with pytest.raises(ValueError, match='question must not be empty'):
         await node.run(RAGInput('  ', 7, 9))
+
+
+def test_rag_node_rejects_zero_candidate_limit():
+    with pytest.raises(
+        ValueError, match='max_candidates must be greater than zero'
+    ):
+        RAGNode(
+            AsyncMock(), AsyncMock(), AsyncMock(), AsyncMock(), max_candidates=0
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'resource',
+    [
+        None,
+        LoadedResource('document', 1, 1, 'text/plain', 'text', error='failed'),
+        LoadedResource('document', 1, 1, 'text/plain', '  '),
+    ],
+    ids=['missing', 'load-error', 'blank-text'],
+)
+async def test_rag_node_skips_unusable_loaded_resources(resource):
+    candidate = HybridSearchCandidate('document', 1, 1, 0.1)
+    node = RAGNode(AsyncMock(), AsyncMock(), AsyncMock(), AsyncMock())
+
+    selected = await node._select_source('question', candidate, resource, 'run')
+
+    assert selected is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'response',
+    [RuntimeError('model failed'), GenerationResult(raw_text='')],
+)
+async def test_rag_node_skips_sources_when_relevance_is_unavailable(
+    response,
+):
+    engine = AsyncMock()
+    if isinstance(response, Exception):
+        engine.generate.side_effect = response
+    else:
+        engine.generate.return_value = response
+    node = RAGNode(engine, AsyncMock(), AsyncMock(), AsyncMock())
+    candidate = HybridSearchCandidate('document', 1, 1, 0.1)
+    resource = LoadedResource('document', 1, 1, 'text/plain', 'content')
+
+    assert (
+        await node._select_source('question', candidate, resource, 'run')
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_rag_node_reraises_embedding_and_search_errors(monkeypatch):
+    engine = AsyncMock()
+    engine.generate.return_value = GenerationResult(raw_text='question')
+    broken_embedding = AsyncMock()
+    broken_embedding.embedding_query.side_effect = RuntimeError('embedding')
+    node = RAGNode(engine, broken_embedding, AsyncMock(), AsyncMock())
+    with pytest.raises(RuntimeError, match='embedding'):
+        await node.run(RAGInput('question', 7, 9))
+
+    embedding = AsyncMock()
+    embedding.embedding_query.return_value = np.array([1], dtype=np.float32)
+    uow = AsyncMock()
+    uow.document_embedding_repository.hybrid_search.side_effect = RuntimeError(
+        'search'
+    )
+    node = RAGNode(engine, embedding, uow, AsyncMock())
+    with pytest.raises(RuntimeError, match='search'):
+        await node.run(RAGInput('question', 7, 9))
+
+
+@pytest.mark.asyncio
+async def test_rag_node_reraises_resource_loading_errors(monkeypatch):
+    engine = AsyncMock()
+    engine.generate.return_value = GenerationResult(raw_text='question')
+    embedding = AsyncMock()
+    embedding.embedding_query.return_value = np.array([1], dtype=np.float32)
+    uow = AsyncMock()
+    uow.document_embedding_repository.hybrid_search.return_value = []
+    uow.asset_embedding_repository.hybrid_search.return_value = []
+    monkeypatch.setattr(
+        rag_module,
+        'load_rag_resources',
+        AsyncMock(side_effect=RuntimeError('resource loading')),
+    )
+    node = RAGNode(engine, embedding, uow, AsyncMock())
+
+    with pytest.raises(RuntimeError, match='resource loading'):
+        await node.run(RAGInput('question', 7, 9))

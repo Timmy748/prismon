@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 import agents.use_cases.chats as chat_use_cases
+from agents.actions import ChatAction
 from agents.dtos.chat import ChatDTO, CreateChatDTO, UpdateTitleChatDTO
 from agents.dtos.message import CreateMessageDTO, MessageDTO
 from agents.dtos.page import CursorPage, PaginationDTO
@@ -30,7 +31,6 @@ from agents.use_cases.chats import (
     send_message,
     update_chat_title,
 )
-from project.permissions import ProjectPermission
 
 
 def _message_dto(
@@ -55,7 +55,7 @@ def _configure_valid_send(
     chat_repository.get_chat.return_value = ChatDTO(
         3, 'Research', 4, 9, datetime.now(UTC), datetime.now(UTC)
     )
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     project_client.get_api_key.return_value = 'api-secret'
     message_repository.get_messages_by_chat.side_effect = [
         CursorPage([], PaginationDTO(limit=1)),
@@ -122,8 +122,8 @@ async def test_send_message_stream_persists_unlinked_assistant_message(
         {'event': 'token', 'data': 'wer'},
         {'event': 'done', 'data': assistant_message},
     ]
-    project_client.has_permission.assert_awaited_once_with(
-        4, 9, ProjectPermission.CHAT_SEND_MESSAGE
+    project_client.verify_resource_permission.assert_awaited_once_with(
+        4, 9, ChatAction.SEND_MESSAGE
     )
     project_client.get_api_key.assert_awaited_once_with(4, 9, 123)
     message_repository.create_human_message.assert_awaited_once_with(3, 'hello')
@@ -236,7 +236,7 @@ async def test_send_message_rejects_missing_project_permission(
     chat_repository.get_chat.return_value = ChatDTO(
         3, 'Research', 4, 9, datetime.now(UTC), datetime.now(UTC)
     )
-    project_client.has_permission.return_value = False
+    project_client.verify_resource_permission.return_value = False
     data = CreateMessageDTO(None, SenderType.USER, 'hello', {}, {})
 
     with pytest.raises(InsufficientProjectPermissionException):
@@ -288,7 +288,7 @@ async def test_send_message_rejects_consecutive_user_message(
     chat_repository.get_chat.return_value = ChatDTO(
         3, 'Research', 4, 9, datetime.now(UTC), datetime.now(UTC)
     )
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     message_repository.get_messages_by_chat.return_value = CursorPage(
         [_message_dto(SenderType.USER)], PaginationDTO(limit=1)
     )
@@ -468,7 +468,7 @@ async def test_send_message_emits_error_if_chat_disappears_before_save(
         ChatDTO(3, 'Research', 4, 9, datetime.now(UTC), datetime.now(UTC)),
         None,
     ]
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     message_repository.get_messages_by_chat.side_effect = [
         CursorPage([], PaginationDTO(limit=1)),
         CursorPage([_message_dto(SenderType.USER)], PaginationDTO(limit=100)),
@@ -507,7 +507,7 @@ async def test_create_chat_persists_title_after_permission_check(
 ):
     created = ChatDTO(3, 'Research', 4, 9, datetime.now(UTC), datetime.now(UTC))
     chat_repository.create_chat.return_value = created
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
 
     result = await create_chat(
         chat_repository,
@@ -528,7 +528,7 @@ async def test_get_chat_messages_returns_page_after_authorization(
     chat_repository.get_chat.return_value = ChatDTO(
         3, 'Research', 4, 9, datetime.now(UTC), datetime.now(UTC)
     )
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
     page = CursorPage([], PaginationDTO(limit=12))
     message_repository.get_messages_by_chat.return_value = page
 
@@ -552,7 +552,7 @@ async def test_update_chat_title_persists_after_authorization(
         3, 'Research', 4, 9, datetime.now(UTC), datetime.now(UTC)
     )
     chat_repository.update_chat_title.return_value = updated
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
 
     result = await update_chat_title(
         chat_repository,
@@ -587,7 +587,7 @@ async def test_delete_chat_deletes_after_authorization(
     chat_repository.get_chat.return_value = ChatDTO(
         3, 'Research', 4, 9, datetime.now(UTC), datetime.now(UTC)
     )
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
 
     await delete_chat(chat_repository, project_client, 3, 9)
 
@@ -600,7 +600,7 @@ async def test_get_project_chats_returns_repository_page(
 ):
     page = CursorPage([], PaginationDTO(limit=10))
     chat_repository.get_chats_by_project.return_value = page
-    project_client.has_permission.return_value = True
+    project_client.verify_resource_permission.return_value = True
 
     result = await get_project_chats(
         chat_repository, project_client, 4, 9, PaginationDTO(limit=10)

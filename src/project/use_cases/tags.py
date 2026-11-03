@@ -9,7 +9,13 @@ from project.exceptions import (
     ProjectNotFoundException,
     TagNotFoundException,
 )
-from project.permissions import ProjectPermission, has_permission
+from project.permissions.actions import AssetAction, DocumentAction, TagAction
+from project.permissions.dispatcher import verify_resource_permission
+from project.permissions.dtos import (
+    AssetPermissionDTO,
+    DocumentPermissionDTO,
+    TagPermissionDTO,
+)
 from project.unit_of_work import IProjectUnitOfWork
 
 logger = get_logger(__name__)
@@ -19,7 +25,8 @@ async def _authorize(
     uow: IProjectUnitOfWork,
     project_id: int,
     user_id: int,
-    permission: ProjectPermission,
+    resource: object,
+    action: TagAction | AssetAction | DocumentAction,
 ):
     if await uow.project_repository.get_project(project_id) is None:
         raise ProjectNotFoundException(project_id)
@@ -32,20 +39,27 @@ async def _authorize(
     if not members.items:
         raise ProjectNotFoundException(project_id)
     member = members.items[0]
-    if not has_permission(member.role, permission):
+    if not verify_resource_permission(member, resource, action):
+        permission = action.value
         logger.warning(
             'Tag permission denied: project_id=%s permission=%s',
             project_id,
-            permission.value,
+            permission,
         )
-        raise InsufficientProjectPermissionException(permission.value)
+        raise InsufficientProjectPermissionException(permission)
     return member
 
 
 async def get_tags(
     uow: IProjectUnitOfWork, project_id: int, user_id: int
 ) -> list[TagDTO]:
-    await _authorize(uow, project_id, user_id, ProjectPermission.TAG_READ)
+    await _authorize(
+        uow,
+        project_id,
+        user_id,
+        TagPermissionDTO(project_id),
+        TagAction.READ,
+    )
     tags = await uow.tag_repository.get_tags(project_id)
     logger.info(
         'Project tags loaded: project_id=%s count=%s', project_id, len(tags)
@@ -59,7 +73,13 @@ async def add_tag(
     user_id: int,
     data: CreateTagDTO,
 ) -> TagDTO:
-    await _authorize(uow, project_id, user_id, ProjectPermission.TAG_CREATE)
+    await _authorize(
+        uow,
+        project_id,
+        user_id,
+        TagPermissionDTO(project_id),
+        TagAction.CREATE,
+    )
     tag = await uow.tag_repository.create_tag(
         project_id, data.label, data.description, data.color
     )
@@ -77,7 +97,13 @@ async def update_tag(
     tag_id: int,
     data: UpdateTagDTO,
 ) -> TagDTO:
-    await _authorize(uow, project_id, user_id, ProjectPermission.TAG_UPDATE)
+    await _authorize(
+        uow,
+        project_id,
+        user_id,
+        TagPermissionDTO(project_id),
+        TagAction.UPDATE,
+    )
     tag = await uow.tag_repository.get_tag(tag_id)
     if tag is None or tag.project_id != project_id:
         raise TagNotFoundException(tag_id)
@@ -102,7 +128,13 @@ async def delete_tag(
     user_id: int,
     tag_id: int,
 ) -> None:
-    await _authorize(uow, project_id, user_id, ProjectPermission.TAG_DELETE)
+    await _authorize(
+        uow,
+        project_id,
+        user_id,
+        TagPermissionDTO(project_id),
+        TagAction.DELETE,
+    )
     tag = await uow.tag_repository.get_tag(tag_id)
     if tag is None or tag.project_id != project_id:
         raise TagNotFoundException(tag_id)
@@ -118,9 +150,15 @@ async def _get_asset(
     project_id: int,
     user_id: int,
     asset_id: int,
-    permission: ProjectPermission,
+    permission: AssetAction,
 ):
-    await _authorize(uow, project_id, user_id, permission)
+    await _authorize(
+        uow,
+        project_id,
+        user_id,
+        AssetPermissionDTO(project_id),
+        permission,
+    )
     asset = await uow.asset_repository.get_asset(asset_id)
     if asset is None or asset.project_id != project_id:
         raise AssetNotFoundException(asset_id)
@@ -132,9 +170,15 @@ async def _get_document(
     project_id: int,
     user_id: int,
     document_id: int,
-    permission: ProjectPermission,
+    permission: DocumentAction,
 ):
-    await _authorize(uow, project_id, user_id, permission)
+    await _authorize(
+        uow,
+        project_id,
+        user_id,
+        DocumentPermissionDTO(project_id),
+        permission,
+    )
     document = await uow.document_repository.get_document(document_id)
     if document is None or document.project_id != project_id:
         raise DocumentNotFoundException(document_id)
@@ -156,9 +200,7 @@ async def get_asset_tags(
     user_id: int,
     asset_id: int,
 ) -> list[TagDTO]:
-    await _get_asset(
-        uow, project_id, user_id, asset_id, ProjectPermission.ASSET_READ
-    )
+    await _get_asset(uow, project_id, user_id, asset_id, AssetAction.READ)
     tags = await uow.tag_repository.get_asset_tags(asset_id)
     logger.info(
         'Asset tags loaded: project_id=%s asset_id=%s count=%s',
@@ -181,7 +223,7 @@ async def attach_asset_tag(
         project_id,
         user_id,
         asset_id,
-        ProjectPermission.ASSET_TAG_ASSIGN,
+        AssetAction.TAG_ASSIGN,
     )
     await _get_project_tag(uow, project_id, tag_id)
     await uow.tag_repository.attach_asset_tag(asset_id, tag_id)
@@ -206,7 +248,7 @@ async def detach_asset_tag(
         project_id,
         user_id,
         asset_id,
-        ProjectPermission.ASSET_TAG_ASSIGN,
+        AssetAction.TAG_ASSIGN,
     )
     await _get_project_tag(uow, project_id, tag_id)
     await uow.tag_repository.detach_asset_tag(asset_id, tag_id)
@@ -230,7 +272,7 @@ async def get_document_tags(
         project_id,
         user_id,
         document_id,
-        ProjectPermission.DOCUMENT_READ,
+        DocumentAction.READ,
     )
     tags = await uow.tag_repository.get_document_tags(document_id)
     logger.info(
@@ -254,7 +296,7 @@ async def attach_document_tag(
         project_id,
         user_id,
         document_id,
-        ProjectPermission.DOCUMENT_TAG_ASSIGN,
+        DocumentAction.TAG_ASSIGN,
     )
     await _get_project_tag(uow, project_id, tag_id)
     await uow.tag_repository.attach_document_tag(document_id, tag_id)
@@ -279,7 +321,7 @@ async def detach_document_tag(
         project_id,
         user_id,
         document_id,
-        ProjectPermission.DOCUMENT_TAG_ASSIGN,
+        DocumentAction.TAG_ASSIGN,
     )
     await _get_project_tag(uow, project_id, tag_id)
     await uow.tag_repository.detach_document_tag(document_id, tag_id)

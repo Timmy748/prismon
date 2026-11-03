@@ -1,6 +1,7 @@
 from dataclasses import replace
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -112,6 +113,34 @@ async def test_get_document_file_url_returns_signed_url(repos, storage):
     assert storage.presigned == [
         ('document-key', 'texto.md', 'text/markdown', 'inline')
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_document_file_url_uses_internal_storage_endpoint(
+    monkeypatch, repos, storage
+):
+    project_repo, member_repo, document_repo = repos
+    unit_of_work = make_unit_of_work(
+        project_repo, member_repo, document_repo=document_repo
+    )
+    document_repo.get_document.return_value = _doc(file='document-key')
+    storage.get_presigned_url = AsyncMock(return_value='https://signed.test')
+    monkeypatch.setattr(
+        'project.use_cases.documents.get_settings',
+        lambda: SimpleNamespace(RUSTFS_ENDPOINT_URL='http://rustfs:9000'),
+    )
+
+    result = await get_document_file_url(
+        unit_of_work, storage, 1, 20, 4, internal=True
+    )
+
+    assert result == 'https://signed.test'
+    storage.get_presigned_url.assert_awaited_once_with(
+        'document-key',
+        download_filename='Brief',
+        disposition='inline',
+        endpoint_url='http://rustfs:9000',
+    )
 
 
 @pytest.mark.asyncio

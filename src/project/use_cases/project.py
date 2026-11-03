@@ -6,6 +6,9 @@ from project.exceptions import (
     InsufficientProjectPermissionException,
     ProjectNotFoundException,
 )
+from project.permissions.actions import ProjectAction
+from project.permissions.dispatcher import verify_resource_permission
+from project.permissions.dtos import ProjectPermissionDTO
 from project.unit_of_work import IProjectUnitOfWork
 
 logger = get_logger(__name__)
@@ -77,7 +80,11 @@ async def update_project(
     data: UpdateProjectDTO,
 ) -> ProjectDTO:
     _, member = await _require_project_member(uow, project_id, user_id)
-    if member.role not in (MemberRole.OWNER, MemberRole.DIRECTOR):
+    if not verify_resource_permission(
+        member,
+        ProjectPermissionDTO(project_id),
+        ProjectAction.UPDATE,
+    ):
         logger.warning(
             'Project update denied: project_id=%s user_id=%s',
             project_id,
@@ -102,7 +109,11 @@ async def delete_project(
     user_id: int,
 ) -> None:
     _, member = await _require_project_member(uow, project_id, user_id)
-    if member.role not in (MemberRole.OWNER):
+    if not verify_resource_permission(
+        member,
+        ProjectPermissionDTO(project_id),
+        ProjectAction.DELETE,
+    ):
         logger.warning(
             'Project deletion denied: project_id=%s user_id=%s',
             project_id,
