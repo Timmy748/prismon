@@ -99,7 +99,14 @@ services:
     build:
       context: .
       dockerfile: dockerfile
-    entrypoint: ["celery", "-A", "infra.celery_app:celery_app", "worker", "--queues=short_tasks", "--hostname=short@%h"]
+    entrypoint:
+      [
+        "celery", "-A", "infra.celery_app:celery_app", "worker",
+        "--queues=short_tasks", "--hostname=short@%h", "--concurrency=1",
+        "--prefetch-multiplier=1", "--max-tasks-per-child=100",
+        "--max-memory-per-child=180000"
+      ]
+    mem_limit: 256m
     env_file: .env
     depends_on:
       rabbitmq:
@@ -118,7 +125,14 @@ services:
     build:
       context: .
       dockerfile: dockerfile
-    entrypoint: ["celery", "-A", "infra.celery_app:celery_app", "worker", "--queues=long_tasks", "--hostname=long@%h"]
+    entrypoint:
+      [
+        "celery", "-A", "infra.celery_app:celery_app", "worker",
+        "--queues=long_tasks", "--hostname=long@%h", "--concurrency=1",
+        "--prefetch-multiplier=1", "--max-tasks-per-child=20",
+        "--max-memory-per-child=400000"
+      ]
+    mem_limit: 512m
     env_file: .env
     depends_on:
       rabbitmq:
@@ -180,7 +194,7 @@ services:
   ollama:
     image: ollama/ollama:latest
     entrypoint: ["/bin/sh", "/ollama-entrypoint.sh"]
-    gpus: all
+    # gpus: all
     restart: unless-stopped
     ports:
       - 11434:11434
@@ -202,7 +216,7 @@ services:
 
 volumes:
   pg_data:
-    name: prismon_postgres_data_v2
+    name: prismon_postgres_data
   ollama_data:
     name: ollama_data
   rustfs_data:
