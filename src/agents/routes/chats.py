@@ -151,10 +151,13 @@ def create_chat_routes(  # noqa: PLR0915
                 user.id,
                 data.api_key_id,
                 user_message,
+                config=data.config,
+                uow_factory=uow_factory,
             )
+            await uow.__aexit__(None, None, None)
+            uow = None
 
             async def event_stream() -> AsyncIterator[str]:
-                failure: BaseException | None = None
                 try:
                     if chat is not None:
                         yield format_sse('chat', ChatSchema.from_dto(chat))
@@ -171,7 +174,6 @@ def create_chat_routes(  # noqa: PLR0915
                             event_data = ChatSchema.from_dto(event_data)
                         yield format_sse(event_name, event_data)
                 except AgentsException as error:
-                    failure = error
                     logger.info(
                         'Chat message stream rejected: chat_id=%d '
                         'error_type=%s',
@@ -180,23 +182,14 @@ def create_chat_routes(  # noqa: PLR0915
                     )
                     yield format_sse('error', {'detail': str(error)})
                 except Exception as error:
-                    failure = error
                     logger.error(
                         'Chat message stream failed: chat_id=%d error_type=%s',
                         chat_id,
                         type(error).__name__,
                     )
                     yield format_sse('error', {'detail': str(error)})
-                except BaseException as error:
-                    failure = error
+                except BaseException:
                     raise
-                finally:
-                    if failure is None:
-                        await uow.__aexit__(None, None, None)
-                    else:
-                        await uow.__aexit__(
-                            type(failure), failure, failure.__traceback__
-                        )
 
             return StreamingResponse(
                 event_stream(),

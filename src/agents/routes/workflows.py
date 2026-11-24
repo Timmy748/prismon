@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from agents.dtos.page import CursorPage
 from agents.dtos.workflow import WorkflowDTO
@@ -10,7 +10,7 @@ from agents.unit_of_work import (
     IAgentsUnitOfWork,
     create_agents_unit_of_work,
 )
-from agents.use_cases.workflows import get_workflows
+from agents.use_cases.workflows import get_workflow_config, get_workflows
 from agents.utils.pagination import encode_cursor, pagination_dto
 from infra.logs import get_logger
 
@@ -46,6 +46,14 @@ def create_workflow_routes(
         result = _workflow_page_schema(page)
         logger.info('Listed available workflows: count=%d', len(result.items))
         return result
+
+    @router.get('/{name}/config', response_model=dict[str, object])
+    async def workflow_config(name: str) -> dict[str, object]:
+        async with uow_factory() as uow:
+            config = await get_workflow_config(uow, name)
+        if config is None:
+            raise HTTPException(status_code=404, detail='Workflow not found')
+        return config
 
     return router
 

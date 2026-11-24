@@ -31,6 +31,38 @@ def test_constructor_configures_chat_openrouter(monkeypatch):
     assert engine._llm is chat_openrouter
 
 
+def test_constructor_uses_requested_model_instead_of_environment(monkeypatch):
+    settings = SimpleNamespace(
+        OPENROUTER_MODEL='environment/model',
+        OPENROUTER_TEMPERATURE=0.4,
+    )
+    factory = MagicMock()
+    monkeypatch.setattr(
+        'agents.llm_engine.openrouter.get_settings', lambda: settings
+    )
+    monkeypatch.setattr('agents.llm_engine.openrouter.ChatOpenRouter', factory)
+
+    OpenRouterEngine(api_key='test-key', model='requested/model')
+
+    assert factory.call_args.kwargs['model'] == 'requested/model'
+
+
+def test_constructor_falls_back_to_environment_model(monkeypatch):
+    settings = SimpleNamespace(
+        OPENROUTER_MODEL='environment/model',
+        OPENROUTER_TEMPERATURE=0.4,
+    )
+    factory = MagicMock()
+    monkeypatch.setattr(
+        'agents.llm_engine.openrouter.get_settings', lambda: settings
+    )
+    monkeypatch.setattr('agents.llm_engine.openrouter.ChatOpenRouter', factory)
+
+    OpenRouterEngine(api_key='test-key', model=None)
+
+    assert factory.call_args.kwargs['model'] == 'environment/model'
+
+
 @pytest.mark.parametrize('api_key', ['', '   '])
 def test_constructor_rejects_missing_api_key(monkeypatch, api_key):
     settings = SimpleNamespace(

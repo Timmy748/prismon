@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from langgraph.graph.state import CompiledStateGraph
@@ -10,9 +10,35 @@ from agents.llm_engine.base import (
     GenerationChunk,
     GenerationFinal,
 )
-from agents.workflows.base import WorkflowExecution
+from agents.workflows.base import WorkflowEvent, WorkflowExecution
 from agents.workflows.chat import ChatWorkflow
 from agents.workflows.nodes.rag import RAGInput, RAGResult, SelectedRAGSource
+
+
+def test_chat_workflow_config_describes_provider_and_model_per_graph():
+    provider_options = [
+        {'label': 'Ollama', 'value': 'ollama'},
+        {'label': 'OpenRouter', 'value': 'openrouter'},
+    ]
+
+    assert set(ChatWorkflow.config) == {'rag', 'chat'}
+    for graph_config in ChatWorkflow.config.values():
+        assert [field['name'] for field in graph_config] == [
+            'provider',
+            'model',
+        ]
+        assert graph_config[0] == {
+            'name': 'provider',
+            'type': 'select',
+            'description': 'Provedor do modelo de linguagem.',
+            'options': provider_options,
+            'default': 'ollama',
+        }
+        assert graph_config[1] == {
+            'name': 'model',
+            'type': 'model',
+            'description': 'Modelo de linguagem usado neste grafo.',
+        }
 
 
 @pytest.mark.asyncio
@@ -87,6 +113,39 @@ async def test_chat_workflow_stream_emits_chunks_then_final_generation(
 
 
 @pytest.mark.asyncio
+async def test_chat_workflow_forwards_config_and_generic_events(
+    chat_workflow_engine, message_history
+):
+    workflow = ChatWorkflow(engine=chat_workflow_engine)
+    generic_event: WorkflowEvent[dict[str, str]] = {
+        'event': 'node_status',
+        'data': {'node': 'retrieve_context'},
+    }
+    state_graph = Mock()
+
+    async def graph_stream(state, *, stream_mode):
+        assert state == {
+            'messages': message_history,
+            'config': {'retrieve': {}},
+        }
+        assert stream_mode == 'custom'
+        yield generic_event
+
+    state_graph.astream.side_effect = graph_stream
+    workflow._graph = state_graph
+
+    events = [
+        event
+        async for event in workflow.stream(
+            'thread-1',
+            {'messages': message_history, 'config': {'retrieve': {}}},
+        )
+    ]
+
+    assert events == [generic_event]
+
+
+@pytest.mark.asyncio
 async def test_chat_workflow_injects_selected_rag_context_into_response_prompt(
     chat_workflow_engine, message_history
 ):
@@ -138,7 +197,10 @@ async def test_chat_workflow_injects_selected_rag_context_into_response_prompt(
 def test_chat_workflow_builds_compiled_graph(chat_workflow_engine):
     workflow = ChatWorkflow(engine=chat_workflow_engine)
 
-    assert isinstance(workflow.graph, CompiledStateGraph)
+    compiled_graph = workflow.graph
+
+    assert isinstance(compiled_graph, CompiledStateGraph)
+    assert workflow.graph is compiled_graph
 
 
 @pytest.mark.asyncio

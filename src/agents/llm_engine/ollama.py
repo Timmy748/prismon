@@ -15,19 +15,20 @@ class OllamaEngine(LangChainEngine):
         self,
         api_key: str,
         llm: BaseChatModel | None = None,
+        model: str | None = None,
     ) -> None:
-        super().__init__(api_key, llm)
+        super().__init__(api_key, llm, model)
 
     @staticmethod
-    def _create_llm(api_key: str) -> BaseChatModel:
+    def _create_llm(api_key: str, model: str | None = None) -> BaseChatModel:
         del api_key
         settings = get_settings()
-        logger.info(
-            'Configuring Ollama chat engine: model=%s', settings.OLLAMA_MODEL
-        )
+        selected_model = model.strip() if model and model.strip() else None
+        selected_model = selected_model or settings.OLLAMA_MODEL
+        logger.info('Configuring Ollama chat engine: model=%s', selected_model)
         return ChatOllama(
             base_url=settings.OLLAMA_BASE_URL,
-            model=settings.OLLAMA_MODEL,
+            model=selected_model,
             temperature=settings.OLLAMA_TEMPERATURE,
         )
 

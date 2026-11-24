@@ -23,6 +23,34 @@ async def test_get_workflows_returns_empty_page(session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_workflow_config_returns_persisted_jsonb_config(
+    session: AsyncSession,
+) -> None:
+    workflow = Workflow(
+        name='chat', description='Chat workflow', version='1.0.0'
+    )
+    workflow.config = {'respond': {'fields': ['temperature']}}
+    session.add(workflow)
+    await session.commit()
+    repository = WorkflowRepository(session)
+
+    config = await repository.get_workflow_config('chat')
+
+    assert config == {'respond': {'fields': ['temperature']}}
+
+
+@pytest.mark.asyncio
+async def test_get_workflow_config_returns_none_for_missing_workflow(
+    session: AsyncSession,
+) -> None:
+    repository = WorkflowRepository(session)
+
+    config = await repository.get_workflow_config('missing')
+
+    assert config is None
+
+
+@pytest.mark.asyncio
 async def test_get_workflows_maps_dtos_and_orders_desc(
     session: AsyncSession,
 ) -> None:

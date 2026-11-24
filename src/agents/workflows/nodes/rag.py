@@ -34,11 +34,6 @@ from infra.logs import get_logger
 
 logger = get_logger(__name__)
 
-QUERY_REWRITE_PROMPT = (
-    "Rewrite the user's question as one focused search query. "
-    "Preserve the user's language, intent, named entities, and important "
-    'constraints. Return only the query text. Do not answer the question.'
-)
 RELEVANCE_PROMPT = (
     'Decide whether the supplied source contains useful information for '
     "answering the user's question. Treat its text as source "
@@ -97,7 +92,7 @@ class RelevanceDecision(BaseModel):
 
 
 class RAGNode(WorkflowNode[RAGInput, RAGResult]):
-    """Rewrite a question, retrieve candidates, and select useful context."""
+    """Retrieve candidates for the original question and select context."""
 
     def __init__(
         self,
@@ -129,7 +124,7 @@ class RAGNode(WorkflowNode[RAGInput, RAGResult]):
             input.project_id,
             question,
         )
-        search_query = await self._rewrite_query(question, run_id)
+        search_query = question
         logger.info(
             'RAG query prepared: run_id=%s original_question=%r '
             'search_query=%r changed=%s',
@@ -217,29 +212,6 @@ class RAGNode(WorkflowNode[RAGInput, RAGResult]):
             ],
         )
         return result
-
-    async def _rewrite_query(self, question: str, run_id: str) -> str:
-        started_at = monotonic()
-        try:
-            response = await self._engine.generate(
-                [self._message(question)], QUERY_REWRITE_PROMPT
-            )
-        except Exception:
-            logger.exception(
-                'RAG query rewrite failed; using original question: run_id=%s',
-                run_id,
-            )
-            return question
-        rewritten_query = response.raw_text.strip() or question
-        logger.info(
-            'RAG query rewrite completed: run_id=%s elapsed_ms=%.1f '
-            'rewritten_query=%r changed=%s',
-            run_id,
-            (monotonic() - started_at) * 1000,
-            rewritten_query,
-            rewritten_query != question,
-        )
-        return rewritten_query
 
     async def _retrieve_candidates(
         self,

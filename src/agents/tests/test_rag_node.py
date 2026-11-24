@@ -12,15 +12,28 @@ from agents.workflows.nodes import rag as rag_module
 from agents.workflows.nodes.rag import (
     RAGInput,
     RAGNode,
+    RAGResult,
     RelevanceDecision,
+    SelectedRAGSource,
 )
 
 PROJECT_ID = 7
 USER_ID = 9
 
 
+def test_rag_result_context_omits_sources_without_text():
+    result = RAGResult(
+        question='question',
+        search_query='question',
+        candidates=(),
+        selected_sources=(SelectedRAGSource('document', 1, 1, 0.5, text=''),),
+    )
+
+    assert result.context_text == ''
+
+
 @pytest.mark.asyncio
-async def test_rag_node_rewrites_retrieves_loads_and_selects_typed_sources(
+async def test_rag_node_retrieves_original_question_and_selects_typed_sources(
     monkeypatch, caplog
 ):
     caplog.set_level(logging.INFO, logger='agents.workflows.nodes.rag')
@@ -30,8 +43,6 @@ async def test_rag_node_rewrites_retrieves_loads_and_selects_typed_sources(
     engine = AsyncMock()
 
     async def generate(messages, system_prompt, *, output_schema=None):
-        if output_schema is None:
-            return GenerationResult(raw_text='focused search query')
         relevant = 'Useful asset source' in messages[0].text
         return GenerationResult(
             raw_text='',
@@ -84,7 +95,7 @@ async def test_rag_node_rewrites_retrieves_loads_and_selects_typed_sources(
 
     result = await node.run(RAGInput('What does the handbook say?', 7, 9))
 
-    assert result.search_query == 'focused search query'
+    assert result.search_query == 'What does the handbook say?'
     assert [
         (item.resource_type, item.resource_id, item.rank)
         for item in result.candidates
@@ -95,30 +106,30 @@ async def test_rag_node_rewrites_retrieves_loads_and_selects_typed_sources(
     ] == [('asset', 30)]
     assert result.context_text == '[asset 30]\nUseful asset source'
     embedding_engine.embedding_query.assert_awaited_once_with(
-        'focused search query'
+        'What does the handbook say?'
     )
     uow.document_embedding_repository.hybrid_search.assert_awaited_once_with(
         project_id=7,
-        query='focused search query',
+        query='What does the handbook say?',
         query_embedding=embedding,
         limit=3,
         rrf_k=60,
     )
     uow.asset_embedding_repository.hybrid_search.assert_awaited_once_with(
         project_id=7,
-        query='focused search query',
+        query='What does the handbook say?',
         query_embedding=embedding,
         limit=3,
         rrf_k=60,
     )
     relevance_messages = [
-        call.args[0][0] for call in engine.generate.await_args_list[1:]
+        call.args[0][0] for call in engine.generate.await_args_list
     ]
     assert len(relevance_messages) == len(candidates)
     assert all(message.payload == {} for message in relevance_messages)
     log_messages = [record.getMessage() for record in caplog.records]
     assert any(
-        "search_query='focused search query'" in message
+        "search_query='What does the handbook say?'" in message
         for message in log_messages
     )
     assert any(
@@ -177,9 +188,14 @@ async def test_rag_node_evaluates_resource_relevance_in_parallel():
 
 
 @pytest.mark.asyncio
-async def test_rag_node_returns_typed_run_result():
+async def test_rag_node_returns_typed_run_result_without_query_rewrite():
     engine = AsyncMock()
-    engine.generate.return_value = GenerationResult(raw_text='rewritten')
+    engine.generate.return_value = GenerationResult(
+        raw_text='',
+        structured_output=RelevanceDecision(
+            relevant=True, reason='Relevant source'
+        ),
+    )
     embedding_engine = AsyncMock()
     embedding_engine.embedding_query.return_value = np.array(
         [1], dtype=np.float32
@@ -198,11 +214,11 @@ async def test_rag_node_returns_typed_run_result():
     result = await node.run(RAGInput('Question?', 7, 9))
 
     assert result.context_text == ''
-    assert result.search_query == 'rewritten'
+    assert result.search_query == 'Question?'
     assert result.question == 'Question?'
     uow.document_embedding_repository.hybrid_search.assert_awaited_once_with(
         project_id=7,
-        query='rewritten',
+        query='Question?',
         query_embedding=embedding_engine.embedding_query.return_value,
         limit=8,
         rrf_k=60,
@@ -210,9 +226,8 @@ async def test_rag_node_returns_typed_run_result():
 
 
 @pytest.mark.asyncio
-async def test_rag_node_falls_back_to_question_when_rewrite_fails():
+async def test_rag_node_does_not_call_llm_when_no_candidates_exist():
     engine = AsyncMock()
-    engine.generate.side_effect = RuntimeError('rewrite unavailable')
     embedding_engine = AsyncMock()
     embedding_engine.embedding_query.return_value = np.array(
         [1], dtype=np.float32
@@ -225,6 +240,7 @@ async def test_rag_node_falls_back_to_question_when_rewrite_fails():
     result = await node.run(RAGInput('Original question', 7, 9))
 
     assert result.search_query == 'Original question'
+    engine.generate.assert_not_awaited()
     uow.document_embedding_repository.hybrid_search.assert_awaited_once()
 
 

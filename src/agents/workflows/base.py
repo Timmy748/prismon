@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypedDict
 
 from langchain_core.runnables import Runnable
 
@@ -8,10 +8,16 @@ from agents.dtos.message import CreateMessageDTO
 from agents.llm_engine.base import ILLMEngine
 
 
+class WorkflowEvent[T](TypedDict):
+    event: str
+    data: T
+
+
 class WorkflowExecution(ABC):
     name: ClassVar[str]
     description: ClassVar[str]
     version: ClassVar[str]
+    config: ClassVar[dict[str, Any]] = {}
 
     def __init__(self, engine: ILLMEngine) -> None:
         self._graph: Runnable[Any, Any] | None = None

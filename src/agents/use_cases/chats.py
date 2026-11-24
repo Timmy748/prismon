@@ -1,7 +1,8 @@
-# ruff: noqa: PLR0913, PLR0917
+# ruff: noqa: PLR0913, PLR0915, PLR0917
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Callable
 
 from agents.actions import ChatAction
 from agents.clients.project import IProjectClient
@@ -32,6 +33,15 @@ from infra.logs import get_logger
 from infra.settings import get_settings
 
 logger = get_logger(__name__)
+_BACKGROUND_CHAT_TASKS: set[asyncio.Task[None]] = set()
+
+
+def _release_background_task(task: asyncio.Task[None]) -> None:
+    _BACKGROUND_CHAT_TASKS.discard(task)
+    if not task.cancelled() and (error := task.exception()) is not None:
+        logger.error(
+            'Background chat task failed: error_type=%s', type(error).__name__
+        )
 
 
 async def _require_project_permission(
@@ -123,6 +133,8 @@ async def send_message(
     user_id: int,
     api_key_id: int,
     message: CreateMessageDTO,
+    config: dict[str, Any] | None = None,
+    uow_factory: Callable[[], IAgentsUnitOfWork] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     if not message.text.strip():
         raise EmptyMessageException()
@@ -144,75 +156,126 @@ async def send_message(
     api_key = await project_client.get_api_key(
         chat.project_id, user_id, api_key_id
     )
-    engine = create_llm_engine(
-        api_key=api_key, provider=get_settings().LLM_PROVIDER
-    )
-    rag_node = RAGNode(
-        engine=engine,
-        embedding_engine=create_embedding_engine(),
-        uow=uow,
-        project_client=project_client,
-    )
-    workflow = workflow_registry_factory().get_workflow(
-        'chat',
-        engine=engine,
-        rag_node=rag_node,
-    )
     await uow.message_repository.create_human_message(chat_id, message.text)
+    await uow.commit()
     history = await uow.message_repository.get_messages_by_chat(
         chat_id, PaginationDTO(limit=100)
     )
-    stream = workflow.stream(
-        str(chat_id),
-        {
-            'messages': list(reversed(history.items)),
-            'project_id': chat.project_id,
-            'user_id': user_id,
-        },
-    )
+    event_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
-    async def stream_response() -> AsyncIterator[dict[str, Any]]:
-        final: GenerationFinal | None = None
+    async def produce() -> None:  # noqa: PLR0912
+        worker_uow = uow_factory() if uow_factory is not None else uow
+        owns_uow = uow_factory is not None
+        entered = False
         try:
-            async for event in stream:
+            if owns_uow:
+                await worker_uow.__aenter__()
+                entered = True
+            default_provider = get_settings().LLM_PROVIDER
+            rag_config = config.get('rag', {}) if config else {}
+            chat_config = config.get('chat', {}) if config else {}
+            if not isinstance(rag_config, dict):
+                rag_config = {}
+            if not isinstance(chat_config, dict):
+                chat_config = {}
+            rag_engine = create_llm_engine(
+                api_key=api_key,
+                provider=rag_config.get('provider', default_provider),
+                model=rag_config.get('model'),
+            )
+            chat_engine = create_llm_engine(
+                api_key=api_key,
+                provider=chat_config.get('provider', default_provider),
+                model=chat_config.get('model'),
+            )
+            rag_node = RAGNode(
+                engine=rag_engine,
+                embedding_engine=create_embedding_engine(),
+                uow=worker_uow,
+                project_client=project_client,
+            )
+            workflow = workflow_registry_factory().get_workflow(
+                'chat', engine=chat_engine, rag_node=rag_node
+            )
+            stream_input: dict[str, Any] = {
+                'messages': list(reversed(history.items)),
+                'project_id': chat.project_id,
+                'user_id': user_id,
+            }
+            if config is not None:
+                stream_input['config'] = config
+            final: GenerationFinal | None = None
+            async for event in workflow.stream(str(chat_id), stream_input):
                 if isinstance(event, GenerationChunk):
                     if event.text_delta:
-                        yield {'event': 'token', 'data': event.text_delta}
+                        await event_queue.put(
+                            {'event': 'token', 'data': event.text_delta}
+                        )
                 elif isinstance(event, GenerationFinal):
                     final = event
+                elif isinstance(event, dict) and 'event' in event:
+                    await event_queue.put(event)
 
             if final is None:
                 raise RuntimeError('O workflow terminou sem evento final.')
             if not final.raw_text.strip():
                 raise EmptyMessageException()
 
-            await _get_chat(uow, chat_id)
-            saved_message = await uow.message_repository.create_ai_message(
-                chat_id=chat_id,
-                parent_id=None,
-                text=final.raw_text,
-                payload={},
-                meta_data={
-                    'workflow': workflow.name,
-                    'version': workflow.version,
-                    'generation': asdict(final.usage),
-                },
+            await _get_chat(worker_uow, chat_id)
+            saved_message = (
+                await worker_uow.message_repository.create_ai_message(
+                    chat_id=chat_id,
+                    parent_id=None,
+                    text=final.raw_text,
+                    payload={},
+                    meta_data={
+                        'workflow': workflow.name,
+                        'version': workflow.version,
+                        'generation': asdict(final.usage),
+                    },
+                )
             )
-            await uow.commit()
+            await worker_uow.commit()
             logger.info(
                 'Completed assistant response: chat_id=%d message_id=%d',
                 chat_id,
                 saved_message.id,
             )
-            yield {'event': 'done', 'data': saved_message}
+            await event_queue.put({'event': 'done', 'data': saved_message})
+        except asyncio.CancelledError:
+            if entered:
+                await worker_uow.rollback()
+            raise
         except Exception as error:
             logger.error(
                 'Assistant response failed: chat_id=%d error_type=%s',
                 chat_id,
                 type(error).__name__,
             )
-            await uow.rollback()
-            yield {'event': 'error', 'data': {'message': str(error)}}
+            if entered:
+                await worker_uow.rollback()
+            await event_queue.put(
+                {'event': 'error', 'data': {'message': str(error)}}
+            )
+        finally:
+            try:
+                if entered:
+                    await worker_uow.__aexit__(None, None, None)
+            finally:
+                await event_queue.put(None)
+
+    task = asyncio.create_task(produce(), name=f'chat-generation-{chat_id}')
+    _BACKGROUND_CHAT_TASKS.add(task)
+    task.add_done_callback(_release_background_task)
+
+    async def stream_response() -> AsyncIterator[dict[str, Any]]:
+        while True:
+            item = await event_queue.get()
+            if item is None:
+                break
+            yield item
+        # Keep a strong reference until the producer has finished.
+        await task
 
     return stream_response()
 

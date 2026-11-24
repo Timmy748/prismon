@@ -17,23 +17,26 @@ class OpenRouterEngine(LangChainEngine):
         self,
         api_key: str,
         llm: BaseChatModel | None = None,
+        model: str | None = None,
     ) -> None:
-        super().__init__(api_key, llm)
+        super().__init__(api_key, llm, model)
 
     @staticmethod
-    def _create_llm(api_key: str) -> BaseChatModel:
+    def _create_llm(api_key: str, model: str | None = None) -> BaseChatModel:
         settings = get_settings()
         if not api_key.strip():
             raise ValueError('API key must be provided for OpenRouter')
-        if not settings.OPENROUTER_MODEL.strip():
+        selected_model = model.strip() if model and model.strip() else None
+        selected_model = selected_model or settings.OPENROUTER_MODEL
+        if not selected_model.strip():
             raise ValueError('OPENROUTER_MODEL must be configured')
         logger.info(
             'Configuring OpenRouter chat engine: model=%s',
-            settings.OPENROUTER_MODEL,
+            selected_model,
         )
         return ChatOpenRouter(
             api_key=api_key,
-            model=settings.OPENROUTER_MODEL,
+            model=selected_model,
             temperature=settings.OPENROUTER_TEMPERATURE,
             stream_usage=True,
         )

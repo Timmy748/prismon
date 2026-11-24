@@ -279,6 +279,47 @@ async def test_post_message_to_existing_chat_streams_tokens_and_saved_message(
 
 
 @pytest.mark.asyncio
+async def test_post_message_forwards_workflow_config(
+    chat_repository,
+    message_repository,
+    identity_client,
+    project_client,
+    workflow_stub,
+):
+    chat_repository.get_chat.return_value = _chat()
+    message_repository.get_messages_by_chat.return_value = CursorPage(
+        [], PaginationDTO(limit=1)
+    )
+    message_repository.create_human_message.return_value = _message()
+    message_repository.create_ai_message.return_value = _message(
+        message_id=6,
+        parent_id=None,
+        sender_type=SenderType.ASSISTANT,
+        text='answer',
+    )
+    project_client.verify_resource_permission.return_value = True
+    identity_client.get_current_user.return_value = UserDTO(
+        11, 'ana', 'a@example.com'
+    )
+    router = create_chat_routes(
+        lambda: chat_repository,
+        lambda: identity_client,
+        lambda: project_client,
+    )
+    config = {'respond': {'temperature': 0.1}}
+
+    _, events = await _post_message_stream(
+        router,
+        CreateMessageSchema(
+            chat_id=3, api_key_id=123, text='hello', config=config
+        ),
+    )
+
+    assert [name for name, _ in events] == ['token', 'token', 'done']
+    assert workflow_stub.workflow.stream.call_args.args[1]['config'] == config
+
+
+@pytest.mark.asyncio
 async def test_post_message_without_chat_streams_created_chat_event(
     chat_repository,
     message_repository,
@@ -695,7 +736,7 @@ async def test_post_message_reraises_cancellation_before_opening_uow(
 
 
 @pytest.mark.asyncio
-async def test_post_message_stream_reraises_cancellation_and_closes_uow(
+async def test_post_message_stream_reraises_cancellation_after_closing_uow(
     chat_repository, identity_client, project_client, monkeypatch
 ):
     async def cancelled_stream(*args, **kwargs):
@@ -723,7 +764,7 @@ async def test_post_message_stream_reraises_cancellation_and_closes_uow(
     with pytest.raises(asyncio.CancelledError):
         _ = ''.join([chunk async for chunk in response.body_iterator])
 
-    assert chat_repository.rollback.await_count == 1
+    assert chat_repository.rollback.await_count == 0
 
 
 @pytest.mark.asyncio
@@ -794,6 +835,19 @@ def test_create_message_schema_rejects_non_positive_api_key_id(api_key_id):
 def test_create_message_schema_requires_api_key_id():
     with pytest.raises(ValidationError, match='api_key_id'):
         CreateMessageSchema(chat_id=CHAT_ID, text='hello')
+
+
+def test_create_message_schema_accepts_workflow_config():
+    config = {'retrieve_context': {'fields': ['question']}}
+
+    schema = CreateMessageSchema(
+        chat_id=CHAT_ID,
+        api_key_id=123,
+        text='hello',
+        config=config,
+    )
+
+    assert schema.config == config
 
 
 @pytest.mark.asyncio

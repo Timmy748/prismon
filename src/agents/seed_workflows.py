@@ -1,6 +1,7 @@
 import asyncio
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from agents.database import get_session_factory
 from agents.entities.workflow import Workflow
@@ -25,19 +26,26 @@ async def seed_workflows(registry: WorkflowRegistry | None = None) -> None:
     async with session_factory() as session:
         existing_workflows = {
             workflow.name: workflow
-            for workflow in (await session.scalars(select(Workflow))).all()
+            for workflow in (
+                await session.scalars(
+                    select(Workflow).options(
+                        selectinload(Workflow.workflow_config)
+                    )
+                )
+            ).all()
         }
 
         for workflow_class in registry.list_workflows():
             workflow = existing_workflows.get(workflow_class.name)
+            config = workflow_class.config
             if workflow is None:
-                session.add(
-                    Workflow(
-                        name=workflow_class.name,
-                        description=workflow_class.description,
-                        version=workflow_class.version,
-                    )
+                workflow = Workflow(
+                    name=workflow_class.name,
+                    description=workflow_class.description,
+                    version=workflow_class.version,
                 )
+                workflow.config = config
+                session.add(workflow)
                 created_count += 1
                 logger.info(
                     'Created workflow during seed: %s', workflow_class.name
@@ -47,12 +55,15 @@ async def seed_workflows(registry: WorkflowRegistry | None = None) -> None:
             if (
                 workflow.description != workflow_class.description
                 or workflow.version != workflow_class.version
+                or workflow.workflow_config is None
+                or workflow.config != config
             ):
                 workflow.description = workflow_class.description
                 workflow.version = workflow_class.version
+                workflow.config = config
                 updated_count += 1
                 logger.info(
-                    'Updated workflow metadata during seed: %s',
+                    'Updated workflow metadata and config during seed: %s',
                     workflow_class.name,
                 )
             else:
