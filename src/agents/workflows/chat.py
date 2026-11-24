@@ -13,7 +13,7 @@ from agents.llm_engine.base import (
     GenerationFinal,
     ILLMEngine,
 )
-from agents.workflows.base import WorkflowExecution
+from agents.workflows.base import WorkflowEvent, WorkflowExecution
 from agents.workflows.nodes.base import WorkflowNode
 from agents.workflows.nodes.rag import RAGInput, RAGResult
 from agents.workflows.registry import workflow_registry
@@ -32,9 +32,10 @@ class ChatState(TypedDict, total=False):
     user_id: int
     rag_result: RAGResult | None
     generation: GenerationFinal
+    config: dict[str, Any]
 
 
-ChatGenerationEvent = GenerationChunk | GenerationFinal
+ChatGenerationEvent = GenerationChunk | GenerationFinal | WorkflowEvent[Any]
 
 
 @workflow_registry.registry
@@ -42,6 +43,26 @@ class ChatWorkflow(WorkflowExecution):
     name = 'chat'
     description = 'Conversa simples usando o histórico do chat.'
     version = '1'
+    config = {
+        graph_name: [
+            {
+                'name': 'provider',
+                'type': 'select',
+                'description': 'Provedor do modelo de linguagem.',
+                'options': [
+                    {'label': 'Ollama', 'value': 'ollama'},
+                    {'label': 'OpenRouter', 'value': 'openrouter'},
+                ],
+                'default': 'ollama',
+            },
+            {
+                'name': 'model',
+                'type': 'model',
+                'description': 'Modelo de linguagem usado neste grafo.',
+            },
+        ]
+        for graph_name in ('rag', 'chat')
+    }
 
     def __init__(
         self,
@@ -63,6 +84,7 @@ class ChatWorkflow(WorkflowExecution):
         async for event in self.graph.astream(
             {
                 'messages': messages,
+                **({'config': input['config']} if 'config' in input else {}),
                 **{
                     key: input[key]
                     for key in ('project_id', 'user_id')

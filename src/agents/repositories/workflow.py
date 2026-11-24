@@ -2,6 +2,7 @@ from typing import Protocol
 
 from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from agents.dtos.page import CursorPage, PaginationDTO
 from agents.dtos.workflow import WorkflowDTO
@@ -12,6 +13,8 @@ logger = get_logger(__name__)
 
 
 class IWorkflowRepository(Protocol):
+    async def get_workflow_config(self, name: str) -> dict | None: ...
+
     async def get_workflows(
         self, pagination: PaginationDTO = PaginationDTO()
     ) -> CursorPage[WorkflowDTO]: ...
@@ -27,15 +30,24 @@ class WorkflowRepository(IWorkflowRepository):
             name=row.name,
             description=row.description,
             version=row.version,
+            config=row.config,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
+
+    async def get_workflow_config(self, name: str) -> dict | None:
+        workflow = await self._session.scalar(
+            select(Workflow)
+            .options(selectinload(Workflow.workflow_config))
+            .where(Workflow.name == name)
+        )
+        return workflow.config if workflow is not None else None
 
     async def get_workflows(
         self, pagination: PaginationDTO = PaginationDTO()
     ) -> CursorPage[WorkflowDTO]:
         limit = max(1, min(pagination.limit, 100))
-        stmt = select(Workflow)
+        stmt = select(Workflow).options(selectinload(Workflow.workflow_config))
         if pagination.cursor is not None:
             stmt = stmt.where(
                 tuple_(Workflow.updated_at, Workflow.id)

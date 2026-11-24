@@ -58,6 +58,34 @@ def test_constructor_configures_chat_ollama(monkeypatch, ollama_settings):
     )
 
 
+def test_constructor_uses_requested_model_instead_of_environment(
+    monkeypatch, ollama_settings
+):
+    factory = MagicMock()
+    monkeypatch.setattr(
+        'agents.llm_engine.ollama.get_settings', lambda: ollama_settings
+    )
+    monkeypatch.setattr('agents.llm_engine.ollama.ChatOllama', factory)
+
+    OllamaEngine(api_key='unused-key', model='request-model')
+
+    assert factory.call_args.kwargs['model'] == 'request-model'
+
+
+def test_constructor_falls_back_to_environment_model(
+    monkeypatch, ollama_settings
+):
+    factory = MagicMock()
+    monkeypatch.setattr(
+        'agents.llm_engine.ollama.get_settings', lambda: ollama_settings
+    )
+    monkeypatch.setattr('agents.llm_engine.ollama.ChatOllama', factory)
+
+    OllamaEngine(api_key='unused-key', model=None)
+
+    assert factory.call_args.kwargs['model'] == ollama_settings.OLLAMA_MODEL
+
+
 @pytest.mark.asyncio
 async def test_generate_returns_text_and_metadata(
     mock_ollama_llm, message_history

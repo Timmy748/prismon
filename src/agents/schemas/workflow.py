@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -12,6 +13,7 @@ class WorkflowSchema(BaseModel):
     name: str
     description: str
     version: str
+    config: dict[str, Any]
     created_at: datetime
     updated_at: datetime
 
@@ -22,6 +24,7 @@ class WorkflowSchema(BaseModel):
             name=workflow.name,
             description=workflow.description,
             version=workflow.version,
+            config=workflow.config,
             created_at=workflow.created_at,
             updated_at=workflow.updated_at,
         )

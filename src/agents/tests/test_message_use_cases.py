@@ -1,5 +1,7 @@
+import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from unittest.mock import call
 
 import pytest
 
@@ -23,6 +25,7 @@ from agents.llm_engine.base import (
     GenerationFinal,
     GenerationMetadata,
 )
+from agents.tests.fixtures.mocks import MockAgentsUnitOfWork
 from agents.use_cases.chats import (
     create_chat,
     delete_chat,
@@ -131,9 +134,10 @@ async def test_send_message_stream_persists_unlinked_assistant_message(
     assert workflow_call.args == ('chat',)
     assert workflow_call.kwargs['engine'] is workflow_stub.engine
     assert callable(workflow_call.kwargs['rag_node'].run)
-    chat_use_cases.create_llm_engine.assert_called_once_with(
-        api_key='api-secret', provider='openrouter'
-    )
+    assert chat_use_cases.create_llm_engine.call_args_list == [
+        call(api_key='api-secret', provider='openrouter', model=None),
+        call(api_key='api-secret', provider='openrouter', model=None),
+    ]
     stream_call = workflow_stub.workflow.stream.call_args
     assert stream_call.args[0] == '3'
     assert stream_call.args[1] == {
@@ -160,6 +164,303 @@ async def test_send_message_stream_persists_unlinked_assistant_message(
             },
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_send_message_forwards_workflow_config(
+    chat_repository,
+    message_repository,
+    project_client,
+    workflow_stub,
+):
+    _configure_valid_send(chat_repository, message_repository, project_client)
+    config = {'respond': {'temperature': 0.2}}
+
+    events = await send_message(
+        chat_repository,
+        project_client,
+        3,
+        9,
+        123,
+        CreateMessageDTO(None, SenderType.USER, 'hello', {}, {}),
+        config=config,
+    )
+    [event async for event in events]
+
+    assert workflow_stub.workflow.stream.call_args.args[1]['config'] == config
+
+
+@pytest.mark.asyncio
+async def test_send_message_routes_rag_and_chat_configs_to_separate_engines(
+    chat_repository,
+    message_repository,
+    project_client,
+    workflow_stub,
+    monkeypatch,
+):
+    _configure_valid_send(chat_repository, message_repository, project_client)
+    rag_engine = object()
+    chat_engine = object()
+    create_engine = chat_use_cases.create_llm_engine
+    create_engine.side_effect = [rag_engine, chat_engine]
+    monkeypatch.setattr(
+        chat_use_cases,
+        'create_embedding_engine',
+        object,
+    )
+    config = {
+        'rag': {'provider': 'ollama', 'model': 'rag-model'},
+        'chat': {'provider': 'openrouter', 'model': 'chat/model'},
+    }
+
+    events = await send_message(
+        chat_repository,
+        project_client,
+        3,
+        9,
+        123,
+        CreateMessageDTO(None, SenderType.USER, 'hello', {}, {}),
+        config=config,
+    )
+    [event async for event in events]
+
+    assert create_engine.call_args_list == [
+        call(api_key='api-secret', provider='ollama', model='rag-model'),
+        call(api_key='api-secret', provider='openrouter', model='chat/model'),
+    ]
+    workflow_call = workflow_stub.registry.get_workflow.call_args
+    assert workflow_call.kwargs['engine'] is chat_engine
+    assert workflow_call.kwargs['rag_node']._engine is rag_engine
+
+
+@pytest.mark.parametrize('graph_name', ['rag', 'chat'])
+@pytest.mark.asyncio
+async def test_send_message_ignores_non_mapping_graph_config(  # noqa: PLR0913, PLR0917
+    graph_name,
+    chat_repository,
+    message_repository,
+    project_client,
+    workflow_stub,
+    monkeypatch,
+):
+    _configure_valid_send(chat_repository, message_repository, project_client)
+    monkeypatch.setattr(
+        chat_use_cases,
+        'get_settings',
+        lambda: SimpleNamespace(LLM_PROVIDER='ollama'),
+    )
+    config = {graph_name: ['invalid', 'graph', 'config']}
+
+    events = await send_message(
+        chat_repository,
+        project_client,
+        3,
+        9,
+        123,
+        CreateMessageDTO(None, SenderType.USER, 'hello', {}, {}),
+        config=config,
+    )
+    [event async for event in events]
+
+    assert chat_use_cases.create_llm_engine.call_args_list == [
+        call(api_key='api-secret', provider='ollama', model=None),
+        call(api_key='api-secret', provider='ollama', model=None),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_send_message_forwards_generic_workflow_events(
+    chat_repository,
+    message_repository,
+    project_client,
+    workflow_stub,
+):
+    _configure_valid_send(chat_repository, message_repository, project_client)
+
+    async def stream_with_node_event(*args, **kwargs):
+        yield {'event': 'node_progress', 'data': {'node': 'retrieve'}}
+        yield GenerationFinal('answer', [], GenerationMetadata())
+
+    workflow_stub.workflow.stream.side_effect = stream_with_node_event
+    assistant = _message_dto(SenderType.ASSISTANT, text='answer')
+    message_repository.create_ai_message.return_value = assistant
+    events = await send_message(
+        chat_repository,
+        project_client,
+        3,
+        9,
+        123,
+        CreateMessageDTO(None, SenderType.USER, 'hello', {}, {}),
+    )
+
+    received = [event async for event in events]
+
+    assert received == [
+        {'event': 'node_progress', 'data': {'node': 'retrieve'}},
+        {'event': 'done', 'data': assistant},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_send_message_persists_after_sse_consumer_disconnects(
+    chat_repository,
+    message_repository,
+    project_client,
+    workflow_stub,
+):
+    _configure_valid_send(chat_repository, message_repository, project_client)
+    release_generation = asyncio.Event()
+    persisted = asyncio.Event()
+    committed = asyncio.Event()
+    worker_uow = MockAgentsUnitOfWork(
+        chat_repository.chat_repository,
+        message_repository,
+        chat_repository.workflow_repository,
+    )
+    worker_uow.commit.side_effect = committed.set
+    assistant = _message_dto(SenderType.ASSISTANT, text='answer')
+
+    async def paused_stream(*args, **kwargs):
+        yield GenerationChunk(text_delta='partial')
+        await release_generation.wait()
+        yield GenerationFinal('answer', [], GenerationMetadata())
+
+    async def save_assistant(**kwargs):
+        persisted.set()
+        return assistant
+
+    workflow_stub.workflow.stream.side_effect = paused_stream
+    message_repository.create_ai_message.side_effect = save_assistant
+    events = await send_message(
+        chat_repository,
+        project_client,
+        3,
+        9,
+        123,
+        CreateMessageDTO(None, SenderType.USER, 'hello', {}, {}),
+        uow_factory=lambda: worker_uow,
+    )
+    assert await events.__anext__() == {'event': 'token', 'data': 'partial'}
+
+    await events.aclose()
+    release_generation.set()
+    await asyncio.wait_for(persisted.wait(), timeout=1)
+    await asyncio.wait_for(committed.wait(), timeout=1)
+
+    worker_uow.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_send_message_rolls_back_worker_uow_on_generation_error(
+    chat_repository,
+    message_repository,
+    project_client,
+    workflow_stub,
+):
+    _configure_valid_send(chat_repository, message_repository, project_client)
+    worker_uow = MockAgentsUnitOfWork(
+        chat_repository.chat_repository,
+        message_repository,
+        chat_repository.workflow_repository,
+    )
+
+    async def failing_stream(*args, **kwargs):
+        raise RuntimeError('generation failed')
+        yield  # pragma: no cover
+
+    workflow_stub.workflow.stream.side_effect = failing_stream
+    events = await send_message(
+        chat_repository,
+        project_client,
+        3,
+        9,
+        123,
+        CreateMessageDTO(None, SenderType.USER, 'hello', {}, {}),
+        uow_factory=lambda: worker_uow,
+    )
+
+    assert [event async for event in events] == [
+        {'event': 'error', 'data': {'message': 'generation failed'}}
+    ]
+    worker_uow.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_send_message_rolls_back_worker_uow_on_producer_cancellation(
+    chat_repository,
+    message_repository,
+    project_client,
+    workflow_stub,
+):
+    _configure_valid_send(chat_repository, message_repository, project_client)
+    worker_uow = MockAgentsUnitOfWork(
+        chat_repository.chat_repository,
+        message_repository,
+        chat_repository.workflow_repository,
+    )
+
+    async def cancelled_stream(*args, **kwargs):
+        raise asyncio.CancelledError()
+        yield  # pragma: no cover
+
+    workflow_stub.workflow.stream.side_effect = cancelled_stream
+    events = await send_message(
+        chat_repository,
+        project_client,
+        3,
+        9,
+        123,
+        CreateMessageDTO(None, SenderType.USER, 'hello', {}, {}),
+        uow_factory=lambda: worker_uow,
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        [event async for event in events]
+
+    worker_uow.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_send_message_does_not_rollback_request_uow_on_producer_cancel(
+    chat_repository,
+    message_repository,
+    project_client,
+    workflow_stub,
+):
+    _configure_valid_send(chat_repository, message_repository, project_client)
+
+    async def cancelled_stream(*args, **kwargs):
+        raise asyncio.CancelledError()
+        yield  # pragma: no cover
+
+    workflow_stub.workflow.stream.side_effect = cancelled_stream
+    events = await send_message(
+        chat_repository,
+        project_client,
+        3,
+        9,
+        123,
+        CreateMessageDTO(None, SenderType.USER, 'hello', {}, {}),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        [event async for event in events]
+
+    chat_repository.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_release_background_task_logs_unhandled_task_error(caplog):
+    async def fail():
+        raise RuntimeError('background task failed')
+
+    task = asyncio.create_task(fail())
+    with pytest.raises(RuntimeError, match='background task failed'):
+        await task
+
+    chat_use_cases._release_background_task(task)
+
+    assert 'Background chat task failed: error_type=RuntimeError' in caplog.text
 
 
 @pytest.mark.asyncio

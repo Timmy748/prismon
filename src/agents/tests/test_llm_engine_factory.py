@@ -13,7 +13,22 @@ def test_create_llm_engine_passes_api_key_to_ollama(monkeypatch):
     result = create_llm_engine(api_key='api-secret', provider=' ollama ')
 
     assert result is engine
-    ollama_engine.assert_called_once_with(api_key='api-secret')
+    ollama_engine.assert_called_once_with(api_key='api-secret', model=None)
+
+
+def test_create_llm_engine_passes_model_to_ollama(monkeypatch):
+    engine = object()
+    ollama_engine = MagicMock(return_value=engine)
+    monkeypatch.setattr('agents.llm_engine.factory.OllamaEngine', ollama_engine)
+
+    result = create_llm_engine(
+        api_key='api-secret', provider='ollama', model='custom-ollama'
+    )
+
+    assert result is engine
+    ollama_engine.assert_called_once_with(
+        api_key='api-secret', model='custom-ollama'
+    )
 
 
 def test_create_llm_engine_selects_openrouter(monkeypatch):
@@ -26,7 +41,24 @@ def test_create_llm_engine_selects_openrouter(monkeypatch):
     result = create_llm_engine(api_key='api-secret', provider=' OpenRouter ')
 
     assert result is engine
-    openrouter_engine.assert_called_once_with(api_key='api-secret')
+    openrouter_engine.assert_called_once_with(api_key='api-secret', model=None)
+
+
+def test_create_llm_engine_passes_model_to_openrouter(monkeypatch):
+    engine = object()
+    openrouter_engine = MagicMock(return_value=engine)
+    monkeypatch.setattr(
+        'agents.llm_engine.factory.OpenRouterEngine', openrouter_engine
+    )
+
+    result = create_llm_engine(
+        api_key='api-secret', provider='openrouter', model='custom/router'
+    )
+
+    assert result is engine
+    openrouter_engine.assert_called_once_with(
+        api_key='api-secret', model='custom/router'
+    )
 
 
 def test_create_llm_engine_rejects_unsupported_provider(monkeypatch):

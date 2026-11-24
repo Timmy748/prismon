@@ -12,3 +12,7 @@ async def get_workflows(
     page = await uow.workflow_repository.get_workflows(pagination)
     logger.debug('Retrieved workflows: count=%d', len(page.items))
     return page
+
+
+async def get_workflow_config(uow: IAgentsUnitOfWork, name: str) -> dict | None:
+    return await uow.workflow_repository.get_workflow_config(name)

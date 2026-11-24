@@ -33,12 +33,15 @@ class LangChainEngine(ABC, ILLMEngine):
         self,
         api_key: str,
         llm: BaseChatModel | None = None,
+        model: str | None = None,
     ) -> None:
-        self._llm = llm if llm is not None else self._create_llm(api_key)
+        self._llm = llm if llm is not None else self._create_llm(api_key, model)
 
     @staticmethod
     @abstractmethod
-    def _create_llm(api_key: str) -> BaseChatModel: ...
+    def _create_llm(
+        api_key: str, model: str | None = None
+    ) -> BaseChatModel: ...
 
     @staticmethod
     @abstractmethod
